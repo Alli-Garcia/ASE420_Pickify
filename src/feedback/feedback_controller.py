@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from src.authentication.auth_controller import get_current_user
+from src.notifications.fcm_manager import send_feedback_notification
 from src.polls.poll_controller import poll_db
 from pydantic import BaseModel
 from .models import Feedback
@@ -17,12 +18,17 @@ class Feedback(BaseModel):
     comment: str
 
 @router.post("/add")
-async def add_feedback(feedback: Feedback, current_user: str = Depends(get_current_user)):
+async def add_feedback(poll_title: str, comment: str, current_user: str = Depends(get_current_user)):
     if not any(poll.title == feedback.poll_title for poll in poll_db):
         raise HTTPException(status_code=404, detail="Poll not found")
-
+    feedback = {
+        "poll_title": poll_title,
+        "comment": comment,
+        "commenter": current_user
+    }
     feedback.commenter = current_user  # Add authenticated username to feedback
     feedback_db.append(feedback)
+    await send_feedback_notification(current_user, poll_title)
     return {"message": "Feedback added successfully"}
 
 @router.get("/list")

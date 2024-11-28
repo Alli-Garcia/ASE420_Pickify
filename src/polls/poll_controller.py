@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from src.authentication.utils import verify_token
 from .models import Poll
 from typing import List
+from src.websockets.connection_manager import manager
 
 router = APIRouter()
 
@@ -55,5 +56,9 @@ async def vote(poll_title: str, option: str, current_user: str = Depends(get_cur
             if 'votes' not in poll:
                 poll.votes = {}
             poll.votes[option] = poll.votes.get(option, 0) + 1
+
+            await manager.broadcast(f"Poll {poll_title} updated: {option} has {poll['votes'][option]} votes.")
+
+
             return {"message": f"Vote recorded for {option}"}
     raise HTTPException(status_code=404, detail="Poll not found")
