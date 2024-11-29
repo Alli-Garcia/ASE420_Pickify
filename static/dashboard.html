@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pickify - Analytics Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <header>
+        <h1>Pickify Analytics Dashboard</h1>
+        <p>View analytics for your poll performance and participation insights</p>
+    </header>
+
+    <section id="analytics-content">
+        <!-- General Poll Information -->
+        <div class="poll-info">
+            <h2>Poll Information</h2>
+            <p><strong>Title:</strong> <span id="poll-title"></span></p>
+            <p><strong>Question:</strong> <span id="poll-question"></span></p>
+            <p><strong>Total Participants:</strong> <span id="total-participants"></span></p>
+            <p><strong>Total Votes:</strong> <span id="total-votes"></span></p>
+        </div>
+
+        <!-- Votes Chart -->
+        <div class="chart-container">
+            <h2>Votes by Option</h2>
+            <canvas id="votesChart" width="400" height="200"></canvas>
+        </div>
+
+        <!-- Feedback Section -->
+        <div class="feedback-section">
+            <h2>Comments and Feedback</h2>
+            <ul id="feedback-list">
+                <!-- Feedback items will be populated here -->
+            </ul>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", async function () {
+            // Replace 'pollId' with the actual poll ID from your URL or context
+            const pollId = "your_poll_id_here";
+
+            // Fetch analytics data from the server
+            try {
+                let response = await fetch(`/polls/analytics/${pollId}`);
+                if (!response.ok) {
+                    throw new Error("Failed to fetch analytics data");
+                }
+                let data = await response.json();
+
+                // Populate general poll information
+                document.getElementById("poll-title").textContent = data.poll_title;
+                document.getElementById("poll-question").textContent = data.poll_question;
+                document.getElementById("total-participants").textContent = data.participation_rate;
+                document.getElementById("total-votes").textContent = data.total_votes;
+
+                // Prepare chart data
+                const chartLabels = Object.keys(data.option_votes);
+                const chartData = Object.values(data.option_votes);
+
+                // Create a chart to display votes
+                const ctx = document.getElementById('votesChart').getContext('2d');
+                const votesChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            label: '# of Votes',
+                            data: chartData,
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                // Fetch and display feedback
+                let feedbackResponse = await fetch(`/feedback/list?poll_id=${pollId}`);
+                if (!feedbackResponse.ok) {
+                    throw new Error("Failed to fetch feedback data");
+                }
+                let feedbackData = await feedbackResponse.json();
+                const feedbackList = document.getElementById("feedback-list");
+                feedbackData.forEach(feedback => {
+                    let li = document.createElement("li");
+                    li.textContent = `${feedback.commenter}: ${feedback.comment}`;
+                    feedbackList.appendChild(li);
+                });
+
+            } catch (error) {
+                console.error("Error loading analytics:", error);
+                // Handle errors gracefully here, such as showing an error message in the UI
+            }
+        });
+    </script>
+
+</body>
+
+</html>

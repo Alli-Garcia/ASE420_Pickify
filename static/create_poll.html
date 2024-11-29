@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create a Multiple Choice Poll</title>
+    <link rel="stylesheet" href="/static/styles.css"> <!-- Link to your CSS file -->
+    <script>
+        function generateOptions() {
+            const numOptions = document.getElementById("num_options").value;
+            const optionsContainer = document.getElementById("options_container");
+            optionsContainer.innerHTML = ""; // Clear previous options
+            for (let i = 0; i < numOptions; i++) {
+                optionsContainer.innerHTML += `
+                    <label for="option_${i + 1}">Option ${i + 1}:</label>
+                    <input type="text" id="option_${i + 1}" name="options" required><br><br>
+                `;
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Your Poll</h1>
+        <form id="poll-form" action="/polls/create" method="POST">
+            <div class="form-group">
+                <label for="activity_title">Activity Title:</label>
+                <input type="text" id="activity_title" name="activity_title" required>
+            </div>
+            <br>
+            <div class="form-group">
+                <label for="add_people">Add People (Emails, separated by commas):</label>
+                <input type="text" id="add_people" name="add_people" placeholder="example1@mail.com, example2@mail.com">
+            </div>
+            <br>
+            <div class="form-group">
+                <label for="set_timer">Set Timer (minutes):</label>
+                <input type="number" id="set_timer" name="set_timer" min="1" required>
+            </div>
+            <br>
+            <div class="form-group">
+                <label for="poll_question">Poll Question:</label>
+                <input type="text" id="poll_question" name="poll_question" required>
+            </div>
+            <br>
+            <div class="form-group">
+                <label for="num_options">Number of Options:</label>
+                <input type="number" id="num_options" name="num_options" min="1" max="10" onchange="generateOptions()" required>
+            </div>
+            <br>
+            <div id="options_container"></div>
+            <br>
+            <div class="form-actions">
+                <button type="submit" class="btn-save">Save</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
