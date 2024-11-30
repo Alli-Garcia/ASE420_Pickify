@@ -3,9 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create a Multiple Choice Poll</title>
-    <link rel="stylesheet" href="/static/styles.css"> <!-- Link to your CSS file -->
+    <title>Create a Poll</title>
+    <link rel="stylesheet" href="/static/styles.css">
     <script>
+        function updatePollType() {
+            const pollType = document.getElementById("poll_type").value;
+            const optionsContainer = document.getElementById("options_container");
+            const numOptionsField = document.getElementById("num_options");
+
+            if (pollType === "multiple_choice") {
+                numOptionsField.style.display = "block";
+                optionsContainer.innerHTML = "";
+                numOptionsField.addEventListener('change', generateOptions);
+            } else if (pollType === "q_and_a" || pollType === "wordcloud") {
+                numOptionsField.style.display = "none";
+                optionsContainer.innerHTML = "";
+            }
+        }
+
         function generateOptions() {
             const numOptions = document.getElementById("num_options").value;
             const optionsContainer = document.getElementById("options_container");
@@ -39,12 +54,16 @@
             </div>
             <br>
             <div class="form-group">
-                <label for="poll_question">Poll Question:</label>
-                <input type="text" id="poll_question" name="poll_question" required>
+                <label for="poll_type">Poll Type:</label>
+                <select id="poll_type" name="poll_type" onchange="updatePollType()" required>
+                    <option value="multiple_choice">Multiple Choice</option>
+                    <option value="q_and_a">Q&A</option>
+                    <option value="wordcloud">Wordcloud</option>
+                </select>
             </div>
             <br>
-            <div class="form-group">
-                <label for="num_options">Number of Options:</label>
+            <div id="num_options_field">
+                <label for="num_options" style="display: block;" id="num_options_label">Number of Options:</label>
                 <input type="number" id="num_options" name="num_options" min="1" max="10" onchange="generateOptions()" required>
             </div>
             <br>

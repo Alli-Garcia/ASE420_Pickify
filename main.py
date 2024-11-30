@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from starlette.staticfiles import StaticFiles
 from pathlib import Path
 from typing import List
@@ -11,6 +10,7 @@ from src.authentication.auth_controller import router as auth_router
 from src.polls.poll_controller import router as poll_router
 from src.feedback.feedback_controller import router as feedback_router
 from src.voting.voting_controller import router as voting_router
+from src.shared import templates
 from src.websockets.connection_manager import ConnectionManager
 
 # Create an instance of FastAPI
@@ -27,9 +27,7 @@ logging.basicConfig(
 
 # Static Files and Templates Setup
 static_path = Path(__file__).parent / "static"
-templates_path = Path(__file__).parent / "templates"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
-templates = Jinja2Templates(directory=str(templates_path))
 
 # Register routers from different modules
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])

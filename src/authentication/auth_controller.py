@@ -1,6 +1,6 @@
 # src/authentication/auth_controller.py
 
-from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi import APIRouter, HTTPException, Depends, Response, Form
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
@@ -30,22 +30,20 @@ def hash_password(password: str) -> str:
 
 @router.post("/register")
 async def register_user(
-    user: User,
-    response: Response,
-    #username: str = Form(...),
-    #email: str = Form(...),
-    #password: str = Form(...)
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...)
     ):
     # Check if the username already exists
-    existing_user = await users_collection.find_one({"username": user.username})
+    existing_user = await users_collection.find_one({"username": username})
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
 
     # Hash the user's password before storing
-    hashed_password = hash_password(user.password)
+    hashed_password = hash_password(password)
     user_dict = {
-        "username": user.username,
-        "email": user.email,
+        "username": username,
+        "email": email,
         "hashed_password": hashed_password
     }
     

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Form
+from fastapi import APIRouter, HTTPException, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from src.authentication.utils import verify_token, get_current_user
 from src.notifications.fcm_manager import send_notification
@@ -8,6 +8,7 @@ from src.database import database
 from bson import ObjectId
 from typing import List
 from firebase_admin import messaging
+from src.shared import templates
 
 router = APIRouter()
 
@@ -73,32 +74,12 @@ async def create_poll(
         raise HTTPException(status_code=500, detail="Failed to create poll")
 
 @router.get("/{poll_id}", response_class=HTMLResponse)
-async def view_poll(poll_id: str, current_user: str = Depends(get_current_user)):
+async def view_poll(poll_id: str, request: Request, current_user: str = Depends(get_current_user)):
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
-    # Render a poll view page (assuming HTML is used for rendering poll)
-    poll_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head><title>{poll['activity_title']}</title></head>
-    <body>
-        <h1>{poll['poll_question']}</h1>
-        <form method="post" action="/polls/{poll_id}/vote">
-    """
-    for option in poll["options"]:
-        poll_html += f"""
-            <input type="radio" id="{option}" name="option" value="{option}">
-            <label for="{option}">{option}</label><br>
-        """
-    poll_html += """
-            <br><button type="submit">Vote</button>
-        </form>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=poll_html)
+    return templates.TemplateResponse("poll.html", {"request": Request, "poll": poll, "current_user": current_user})
 
 @router.get("/list")
 async def list_polls(current_user: str = Depends(get_current_user)):
@@ -145,7 +126,7 @@ async def delete_poll(poll_id: str, current_user: str = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Poll not found or user not authorized to delete")
 
 @router.post("/{poll_id}/vote")
-async def vote_on_poll(poll_id: str, option: str = Form(...), current_user: str = Depends(get_current_user)):
+async def vote_on_poll(poll_id: str, option: str = Form(None), answer: str = Form(None), word: str = Form(None), current_user: str = Depends(get_current_user)):
     # Fetch the poll
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
@@ -154,22 +135,36 @@ async def vote_on_poll(poll_id: str, option: str = Form(...), current_user: str 
     if current_user not in poll["participants"]:
         raise HTTPException(status_code=403, detail="User not authorized to vote on this poll")
 
-    # Ensure the selected option is valid
-    if option not in poll["options"]:
-        raise HTTPException(status_code=400, detail="Invalid poll option")
-
-    # Update the vote count
-    poll["votes"][option] = poll["votes"].get(option, 0) + 1
+    # Ensure the selected option or answer is valid
+    if poll["type"] == "multiple_choice":
+        if option not in poll["options"]:
+            raise HTTPException(status_code=400, detail="Invalid poll option")
+        # Update the vote count
+        poll["votes"][option] = poll["votes"].get(option, 0) + 1
+    elif poll["type"] == "q_and_a":
+        if not answer:
+            raise HTTPException(status_code=400, detail="Answer cannot be empty")
+        # Store the answer (this logic might need to be extended to save it properly)
+        if "answers" not in poll:
+            poll["answers"] = []
+        poll["answers"].append({"user": current_user, "answer": answer})
+    elif poll["type"] == "wordcloud":
+        if not word:
+            raise HTTPException(status_code=400, detail="Word cannot be empty")
+        # Store the word (this logic might need to be extended to save it properly)
+        if "words" not in poll:
+            poll["words"] = {}
+        poll["words"][word] = poll["words"].get(word, 0) + 1
 
     # Update the poll in the database
     result = await polls_collection.update_one(
         {"_id": ObjectId(poll_id)},
-        {"$set": {"votes": poll["votes"]}}
+        {"$set": {"votes": poll.get("votes", {}), "answers": poll.get("answers", []), "words": poll.get("words", {})}}
     )
 
     if result.modified_count == 1:
-        await manager.broadcast(f"Poll '{poll['poll_question']}' updated: {option} now has {poll['votes'][option]} votes.")
-        return {"message": f"Vote recorded for {option}"}
+        await manager.broadcast(f"Poll '{poll['poll_question']}' updated.")
+        return {"message": "Vote recorded successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to record vote")
 

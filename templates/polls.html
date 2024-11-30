@@ -3,33 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polls</title>
-    <link rel="stylesheet" href="/static/styles.css"> <!-- Link to your CSS file -->
-    <script>
-        function generateOptions() {
-            const numOptions = document.getElementById("num_options").value;
-            const optionsContainer = document.getElementById("options_container");
-            optionsContainer.innerHTML = ""; // Clear previous options
-            for (let i = 0; i < numOptions; i++) {
-                optionsContainer.innerHTML += `
-                    <label for="option_${i + 1}">Option ${i + 1}:</label>
-                    <input type="text" id="option_${i + 1}" name="options" required><br><br>
-                `;
-            }
-        }
-    </script>    
+    <title>{{ poll['activity_title'] }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Polls</h1>
-        <h2>Choose a Poll Type:</h2>
-        <ul>
-            <li><a href="/multiple_choice">Multiple Choice</a></li>
-            <li><a href="/wordcloud">Word Cloud</a></li>
-            <li><a href="/qanda">Q&A</a></li>
-        </ul>
+        <h1>{{ poll['poll_question'] }}</h1>
+
+        <!-- The form that dynamically displays based on the poll type -->
+        <form method="post" action="/polls/{{ poll['_id'] }}/vote">
+            {% if poll['type'] == 'multiple_choice' %}
+                <h3>Multiple Choice Options:</h3>
+                {% for option in poll['options'] %}
+                    <input type="radio" id="{{ option }}" name="option" value="{{ option }}" required>
+                    <label for="{{ option }}">{{ option }}</label><br>
+                {% endfor %}
+            {% elif poll['type'] == 'q_and_a' %}
+                <h3>Q&A Poll:</h3>
+                <textarea id="answer" name="answer" rows="5" required placeholder="Enter your answer here"></textarea><br><br>
+            {% elif poll['type'] == 'wordcloud' %}
+                <h3>Word Cloud Poll:</h3>
+                <input type="text" id="word" name="word" placeholder="Enter a word" required><br><br>
+            {% endif %}
+            <br>
+            <button type="submit">Submit</button>
+        </form>
     </div>
 
-    <script src="/static/app.js"></script> <!-- Link to your JavaScript file -->
+    <script src="/static/app.js"></script>
 </body>
 </html>
