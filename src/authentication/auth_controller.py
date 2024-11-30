@@ -13,6 +13,8 @@ import bcrypt
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from main import users_collection
 from src.authentication.models import User
+from src.database import database  # Import database here
+from motor.motor_asyncio import AsyncIOMotorCollection
 # Initialize APIRouter for this module
 router = APIRouter()
 

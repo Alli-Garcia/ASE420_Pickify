@@ -9,22 +9,27 @@ from src.feedback.feedback_controller import router as feedback_router
 from src.voting.voting_controller import router as voting_router
 from src.websockets.connection_manager import ConnectionManager
 from pathlib import Path
+from typing import List
+from src.database import database
 import logging
 
 # Create an instance of FastAPI
 app = FastAPI()
 manager = ConnectionManager()
-logging.basicConfig(level=logging.DEBUG)
-# MongoDB connection setup
-MONGODB_URI = "mongodb://localhost:27017/"
-client = AsyncIOMotorClient(MONGODB_URI)
-database = client.get_database("pickify_db")
-users_collection = database.get_collection("users")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
 
-# Static files setup
+# Static Files and Templates Setup
 static_path = Path(__file__).parent / "static"
+templates_path = Path(__file__).parent / "templates"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
-templates = Jinja2Templates(directory=str(static_path))
+templates = Jinja2Templates(directory=str(templates_path))
 
 # Register routers from different modules
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
@@ -50,6 +55,8 @@ async def websocket_endpoint(websocket: WebSocket, poll_id: str):
         logging.info(f"Client disconnected from poll {poll_id}")
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
+    finally:
+        manager.disconnect(websocket)
 
 # Other endpoints for serving HTML pages
 @app.get("/login", response_class=HTMLResponse)
