@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, BackgroundTasks
 from src.authentication.auth_controller import get_current_user
 from src.notifications.fcm_manager import send_feedback_notification
-from main import database
+from src.database import database
 from bson import ObjectId
 from pydantic import BaseModel
 from .models import Feedback
@@ -21,10 +21,10 @@ class Feedback(BaseModel):
 
 @router.post("/add")
 async def add_feedback(
+    background_tasks: BackgroundTasks,  # Removed `Depends()` and used directly
     poll_id: str = Form(...),
     comment: str = Form(...),
-    current_user: str = Depends(get_current_user),
-    background_tasks: BackgroundTasks = Depends()
+    current_user: str = Depends(get_current_user)
 ):
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:

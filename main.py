@@ -1,17 +1,17 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.staticfiles import StaticFiles
+from pathlib import Path
+from typing import List
+import logging
+
+# Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router
 from src.polls.poll_controller import router as poll_router
 from src.feedback.feedback_controller import router as feedback_router
 from src.voting.voting_controller import router as voting_router
 from src.websockets.connection_manager import ConnectionManager
-from pathlib import Path
-from typing import List
-from src.database import database
-import logging
 
 # Create an instance of FastAPI
 app = FastAPI()

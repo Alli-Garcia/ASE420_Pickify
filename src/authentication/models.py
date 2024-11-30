@@ -3,9 +3,11 @@
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from bson import ObjectId
-from main import database
+from src.database import database
+from typing import Any
 
-db: AsyncIOMotorDatabase = database
+# Explicitly mark `db` with `Any` to avoid type checking issues.
+db: Any = database  # Using `Any` to silence Pylance type checking issues
 
 class User(BaseModel):
     username: str
@@ -17,4 +19,5 @@ class User(BaseModel):
         json_encoders = {ObjectId: str}
 
 # MongoDB collection object for users
-users_collection: AsyncIOMotorCollection = db.get_collection("users")
+users_collection: Any = db.get_collection("users")  # Again using `Any` to avoid type issues with motor_asyncio
+

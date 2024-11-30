@@ -1,20 +1,14 @@
 # src/authentication/auth_controller.py
 
-from fastapi import APIRouter, HTTPException, Depends, Response, Request
+from fastapi import APIRouter, HTTPException, Depends, Response, Form
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
-from datetime import timedelta
-from typing import Optional
 from jose import JWTError, jwt
-from starlette.responses import RedirectResponse
-from .models import User, users_collection
+from .models import User
 from .utils import create_access_token, verify_password, hash_password
+from src.database import database
 import bcrypt
-from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
-from main import users_collection
-from src.authentication.models import User
-from src.database import database  # Import database here
-from motor.motor_asyncio import AsyncIOMotorCollection
+
 # Initialize APIRouter for this module
 router = APIRouter()
 
@@ -23,6 +17,8 @@ SECRET_KEY = "secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+# MongoDB collection for users
+users_collection = database.get_collection("users")
 
 # OAuth2 Password Bearer token URL (used to fetch the access token)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -33,24 +29,34 @@ def hash_password(password: str) -> str:
     return hashed.decode('utf-8')
 
 @router.post("/register")
-async def register_user(user: User, response: Response):
-    existing_user = await users_collection.find_one({"username": user.username})
+async def register_user(
+    response: Response,
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...)
+    ):
+    # Check if the username already exists
+    existing_user = await users_collection.find_one({"username": username})
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    hashed_password = hash_password(user.password)
+    # Hash the user's password before storing
+    hashed_password = hash_password(password)
     user_dict = {
-        "username": user.username,
-        "email": user.email,
+        "username": username,
+        "email": email,
         "hashed_password": hashed_password
     }
     
+    # Insert the user into the MongoDB collection
     result = await users_collection.insert_one(user_dict)
+    
+    # Redirect to the polls page after successful registration
     return RedirectResponse(url="/polls", status_code=303)
 
 @router.post("/login")
 async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
-    # Fetch the user data from in-memory user_db
+    # Fetch the user data from MongoDB collection
     user = await users_collection.find_one({"username": form_data.username})
     if not user or not verify_password(form_data.password, user['hashed_password']):
         raise HTTPException(status_code=400, detail="Invalid username or password")

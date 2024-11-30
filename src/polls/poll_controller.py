@@ -4,7 +4,7 @@ from src.authentication.utils import verify_token, get_current_user
 from src.notifications.fcm_manager import send_notification
 from src.websockets.connection_manager import manager
 from datetime import datetime, timedelta, timezone
-from main import database
+from src.database import database
 from bson import ObjectId
 from typing import List
 from firebase_admin import messaging
