@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Form
 from fastapi.responses import HTMLResponse
-from src.authentication.utils import verify_token
+from src.authentication.utils import verify_token, get_current_user
 from src.notifications.fcm_manager import send_notification
 from src.websockets.connection_manager import manager
 from datetime import datetime, timedelta, timezone

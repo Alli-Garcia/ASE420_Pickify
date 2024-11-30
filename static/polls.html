@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Polls</title>
     <link rel="stylesheet" href="/static/styles.css"> <!-- Link to your CSS file -->
+    <script>
+        function generateOptions() {
+            const numOptions = document.getElementById("num_options").value;
+            const optionsContainer = document.getElementById("options_container");
+            optionsContainer.innerHTML = ""; // Clear previous options
+            for (let i = 0; i < numOptions; i++) {
+                optionsContainer.innerHTML += `
+                    <label for="option_${i + 1}">Option ${i + 1}:</label>
+                    <input type="text" id="option_${i + 1}" name="options" required><br><br>
+                `;
+            }
+        }
+    </script>    
 </head>
 <body>
     <div class="container">
