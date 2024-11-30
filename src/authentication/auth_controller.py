@@ -1,6 +1,6 @@
 # src/authentication/auth_controller.py
 
-from fastapi import APIRouter, HTTPException, Depends, Response, Form
+from fastapi import APIRouter, HTTPException, Depends, Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
@@ -30,26 +30,30 @@ def hash_password(password: str) -> str:
 
 @router.post("/register")
 async def register_user(
+    user: User,
     response: Response,
-    username: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...)
+    #username: str = Form(...),
+    #email: str = Form(...),
+    #password: str = Form(...)
     ):
     # Check if the username already exists
-    existing_user = await users_collection.find_one({"username": username})
+    existing_user = await users_collection.find_one({"username": user.username})
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
 
     # Hash the user's password before storing
-    hashed_password = hash_password(password)
+    hashed_password = hash_password(user.password)
     user_dict = {
-        "username": username,
-        "email": email,
+        "username": user.username,
+        "email": user.email,
         "hashed_password": hashed_password
     }
     
     # Insert the user into the MongoDB collection
     result = await users_collection.insert_one(user_dict)
+
+    if not result.inserted_id:
+        raise HTTPException(status_code=500, detail="Failed to create user")
     
     # Redirect to the polls page after successful registration
     return RedirectResponse(url="/polls", status_code=303)

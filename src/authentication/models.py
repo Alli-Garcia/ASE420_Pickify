@@ -1,6 +1,6 @@
 # src/authentication/models.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from bson import ObjectId
 from src.database import database
@@ -11,7 +11,7 @@ db: Any = database  # Using `Any` to silence Pylance type checking issues
 
 class User(BaseModel):
     username: str
-    email: str
+    email: EmailStr
     hashed_password: str
 
     class Config:
