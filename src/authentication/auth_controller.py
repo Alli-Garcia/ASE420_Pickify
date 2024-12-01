@@ -45,22 +45,33 @@ async def register_user(
     
     # Insert the user into the MongoDB collection
     result = await users_collection.insert_one(user_dict)
-
     if not result.inserted_id:
         raise HTTPException(status_code=500, detail="Failed to create user")
     
-    # Redirect to the polls page after successful registration
-    return RedirectResponse(url="/polls", status_code=303)
-
+    access_token = create_access_token(data={"sub": username})
+    response = RedirectResponse(url="/polls", status_code=303)
+    response.set_cookie(
+        key="Authorization",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        samesite="lax",
+        path="/"
+    )
+    return response
 @router.post("/login")
 async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
-    # Fetch the user data from MongoDB collection
-    user = await users_collection.find_one({"username": form_data.username})
+    logging.info(f"Attempting login for user: {form_data.username}")
+    
+    user = await users_collection.find_one({"username": {"$regex": f"^{form_data.username}$", "$options": "i"}})
     if not user or not verify_password(form_data.password, user['hashed_password']):
+        logging.warning(f"Login failed for user: {form_data.username}")
         raise HTTPException(status_code=400, detail="Invalid username or password")
 
     # Create a JWT access token for the authenticated user
     access_token = create_access_token(data={"sub": user["username"]})
+    logging.info(f"Login successful for user: {form_data.username}")
     response = RedirectResponse(url="/polls", status_code=303)
     response.set_cookie(
         key="Authorization", 
@@ -95,9 +106,10 @@ async def get_current_user(request: Request):
         # Retrieve the user from the database
         user = await users_collection.find_one({"username": username})
         if user is None:
+            logging.warning(f"User not found for token payload: {username}")
             raise HTTPException(status_code=401, detail="User not found")
 
-        logging.debug(f"Authenticated user: {username}")
+        logging.info(f"Authenticated user: {username}")
         return user
     except JWTError as e:
         logging.error(f"JWT decoding error: {e}")

@@ -128,6 +128,7 @@ async def read_register(request: Request):
 
 @app.get("/polls", response_class=HTMLResponse)
 async def read_polls(request: Request, current_user: dict = Depends(get_current_user)):
+    logging.debug(f"Current user: {current_user}")
     try:
         polls_cursor = polls_collection.find({})
         polls = await polls_cursor.to_list(length=100)
