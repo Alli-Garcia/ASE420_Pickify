@@ -5,7 +5,7 @@ from src.authentication.auth_controller import get_current_user
 from src.notifications.fcm_manager import send_notification
 from src.websockets.connection_manager import manager
 from datetime import datetime, timedelta, timezone
-from src.database import database
+from src.database import database, device_tokens_collection, users_collection
 from bson import ObjectId
 from typing import List
 from src.shared import templates, polls_collection
@@ -47,7 +47,7 @@ async def create_poll(
     # Split the participants (comma-separated emails)
     participants = [email.strip() for email in add_people.split(",") if email.strip()]
 
-    # Define the poll dictionary to be stored
+    # Create the poll in the database
     poll = {
         "activity_title": activity_title,
         "participants": participants,
@@ -58,30 +58,52 @@ async def create_poll(
         "status": "active",
         "poll_question": poll_question,
         "options": options or [],
-        "type" : poll_type,
+        "type": poll_type,
         "votes": {option: 0 for option in options or []},
     }
-
-    # Insert the poll into MongoDB
     result = await polls_collection.insert_one(poll)
-
-    # Confirm the poll was inserted
     if not result.inserted_id:
         raise HTTPException(status_code=500, detail="Failed to create poll")
 
-    # Send notifications to participants
+    # Validate participants and fetch their device tokens
+    participant_tokens = []
+    valid_participants = []
+    for email in participants:
+        user = await users_collection.find_one({"email": email})
+        if user:
+            # Fetch device tokens for the user
+            tokens_cursor = device_tokens_collection.find({"user_id": user["_id"]})
+            tokens = await tokens_cursor.to_list(length=100)
+            if tokens:
+                participant_tokens.extend([token["device_token"] for token in tokens])
+                valid_participants.append(email)  # Add only valid participants
+        else:
+            logging.warning(f"Email {email} does not exist in the system.")
+
+    # Handle cases where no valid participants are found
+    if not participant_tokens:
+        raise HTTPException(status_code=400, detail="No valid participants found to notify.")
+
+    # Send FCM notifications
     poll_link = f"http://localhost:8000/polls/{result.inserted_id}"  # Adjust for production
     notification_title = f"New Poll: {activity_title}"
-    notification_body = f"Participate in the poll: '{poll_question}'. Click here: {poll_link}"
+    notification_body = f"{poll_question}\nParticipate: {poll_link}"
 
-    for participant in participants:
-    # Sanitize the participant email to create a valid topic name
-        topic_name = participant.replace("@", "_").replace(".", "_")
-    try:
-        await send_notification(topic_name, notification_title, notification_body)
-    except Exception as e:
-        logging.error(f"Failed to send notification to {participant} (topic: {topic_name}): {e}")
+    for token in participant_tokens:
+        try:
+            await send_notification(
+                device_token=token,
+                title=notification_title,
+                body=notification_body
+            )
+        except Exception as e:
+            logging.error(f"Failed to send notification to token {token}: {e}")
 
+    # Update the poll in the database with valid participants only
+    await polls_collection.update_one(
+        {"_id": result.inserted_id},
+        {"$set": {"participants": valid_participants}}
+    )
 
     # Redirect to the dashboard for the newly created poll
     return RedirectResponse(url=f"/analytics/{result.inserted_id}", status_code=303)
@@ -110,12 +132,25 @@ async def view_poll(poll_id: str, request: Request, current_user: str = Depends(
     print(f"Poll retrieved: {poll}")
     return templates.TemplateResponse("poll.html", {"request": request, "poll": poll, "current_user": current_user})
 
-@router.get("/list")
-async def list_polls(current_user: str = Depends(get_current_user)):
-    # Fetch all polls created by the current user
-    polls_cursor = polls_collection.find({"creator": current_user})
-    polls = await polls_cursor.to_list(length=100)
-    return polls
+@router.get("/created-by-me", response_class=HTMLResponse)
+async def polls_created_by_me(request: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        polls_cursor = polls_collection.find({"creator": current_user["username"]})
+        polls = await polls_cursor.to_list(length=100)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching polls created by user: {e}")
+
+    return templates.TemplateResponse("polls_created_by_me.html", {"request": request, "polls": polls, "current_user": current_user})
+
+@router.get("/shared-with-me", response_class=HTMLResponse)
+async def polls_shared_with_me(request: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        polls_cursor = polls_collection.find({"participants": {"$in": [current_user["username"]]}})
+        polls = await polls_cursor.to_list(length=100)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching polls shared with user: {e}")
+
+    return templates.TemplateResponse("polls_shared_with_me.html", {"request": request, "polls": polls, "current_user": current_user})
 
 @router.put("/edit/{poll_id}")
 async def edit_poll(
@@ -164,33 +199,43 @@ async def vote_on_poll(poll_id: str, option: str = Form(None), answer: str = For
     if current_user not in poll["participants"]:
         raise HTTPException(status_code=403, detail="User not authorized to vote on this poll")
 
-    # Ensure the selected option or answer is valid
+    if current_user in poll.get("voters", []):
+        raise HTTPException(status_code=403, detail="User has already voted on this poll")
+
     if poll["type"] == "multiple_choice":
         if option not in poll["options"]:
-            raise HTTPException(status_code=400, detail="Invalid poll option")
-        # Update the vote count
-        poll["votes"][option] = poll["votes"].get(option, 0) + 1
+            raise HTTPException(status_code=400, detail="Invalid option")
+        result = await polls_collection.update_one(
+            {"_id": ObjectId(poll_id)},
+            {
+                "$inc": {f"votes.{option}": 1},
+                "$push": {"voters": current_user},
+            }
+        )
     elif poll["type"] == "q_and_a":
         if not answer:
             raise HTTPException(status_code=400, detail="Answer cannot be empty")
-        # Store the answer (this logic might need to be extended to save it properly)
-        if "answers" not in poll:
-            poll["answers"] = []
-        poll["answers"].append({"user": current_user, "answer": answer})
+        result = await polls_collection.update_one(
+            {"_id": ObjectId(poll_id)},
+            {
+                "$push": {"answers": {"user": current_user, "answer": answer}},
+                "$push": {"voters": current_user},
+            }
+        )
     elif poll["type"] == "wordcloud":
         if not word:
             raise HTTPException(status_code=400, detail="Word cannot be empty")
-        # Store the word (this logic might need to be extended to save it properly)
-        if "words" not in poll:
-            poll["words"] = {}
-        poll["words"][word] = poll["words"].get(word, 0) + 1
+        result = await polls_collection.update_one(
+            {"_id": ObjectId(poll_id)},
+            {
+                "$inc": {f"words.{word}": 1},
+                "$push": {"voters": current_user},
+            }
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported poll type")
 
-    # Update the poll in the database
-    result = await polls_collection.update_one(
-        {"_id": ObjectId(poll_id)},
-        {"$set": {"votes": poll.get("votes", {}), "answers": poll.get("answers", []), "words": poll.get("words", {})}}
-    )
-
+    # Confirm the vote was recorded
     if result.modified_count == 1:
         await manager.broadcast(f"Poll '{poll['poll_question']}' updated.")
         return {"message": "Vote recorded successfully"}

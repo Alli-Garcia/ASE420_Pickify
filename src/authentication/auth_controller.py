@@ -33,8 +33,9 @@ async def register_user(
     # Check if the username already exists
     existing_user = await users_collection.find_one({"username": username})
     if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-
+        return RedirectResponse(
+            url="/login?message=Already%20have%20an%20account%3F", status_code=303
+        )
     # Hash the user's password before storing
     hashed_password = hash_password(password)
     user_dict = {
@@ -47,7 +48,7 @@ async def register_user(
     result = await users_collection.insert_one(user_dict)
     if not result.inserted_id:
         raise HTTPException(status_code=500, detail="Failed to create user")
-    
+
     access_token = create_access_token(data={"sub": username})
     response = RedirectResponse(url="/polls", status_code=303)
     response.set_cookie(
@@ -67,8 +68,10 @@ async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await users_collection.find_one({"username": {"$regex": f"^{form_data.username}$", "$options": "i"}})
     if not user or not verify_password(form_data.password, user['hashed_password']):
         logging.warning(f"Login failed for user: {form_data.username}")
-        raise HTTPException(status_code=400, detail="Invalid username or password")
-
+        return RedirectResponse(
+            url="/register?message=Don%27t%20have%20an%20account%3F%20Register%20here", 
+            status_code=303
+        )
     # Create a JWT access token for the authenticated user
     access_token = create_access_token(data={"sub": user["username"]})
     logging.info(f"Login successful for user: {form_data.username}")

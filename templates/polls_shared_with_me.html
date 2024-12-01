@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polls Shared with Me</title>
+</head>
+<body>
+    <h1>Polls Shared with Me</h1>
+    <ul>
+        {% for poll in polls %}
+        <li>
+            <h2>{{ poll.activity_title }}</h2>
+            <p>Question: {{ poll.poll_question }}</p>
+            <p>Expires At: {{ poll.expires_at }}</p>
+            <a href="/polls/{{ poll._id }}">View Poll</a> |
+            <a href="/polls/vote/{{ poll._id }}">Vote</a>
+        </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

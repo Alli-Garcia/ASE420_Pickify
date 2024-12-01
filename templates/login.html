@@ -24,6 +24,15 @@
                 <button type="submit">Login</button>
             </div>
         </form>
+        <div>
+            <p>
+                {% if request.query_params.message %}
+                    {{ request.query_params.message }}
+                {% endif %}
+            </p>
+            <p>Don't have an account? <a href="/register">Register here</a></p>
+            
+        </div>
     </div>
 
     <script src="/static/app.js"></script> <!-- Link to your JavaScript file -->
