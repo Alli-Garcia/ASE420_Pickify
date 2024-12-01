@@ -6,14 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from firebase_admin import initialize_app, credentials
 from bson import ObjectId
+from dotenv import load_dotenv
 import logging
 import json
 import os
-FIREBASE_ADMIN_JSON = os.getenv("FIREBASE_ADMIN_JSON")
-if not FIREBASE_ADMIN_JSON:
+load_dotenv()
+
+# Retrieve FIREBASE_ADMIN_JSON from environment
+firebase_json = os.getenv("FIREBASE_ADMIN_JSON")
+if not firebase_json:
     raise ValueError("Firebase Admin JSON is missing in the environment variables.")
-print(FIREBASE_ADMIN_JSON)
-cred = credentials.Certificate(json.loads(FIREBASE_ADMIN_JSON))
+
+# Parse JSON and initialize Firebase
+cred = credentials.Certificate(json.loads(firebase_json))
 initialize_app(cred)
 # Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router, get_current_user
