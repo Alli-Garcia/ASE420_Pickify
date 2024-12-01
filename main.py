@@ -1,4 +1,3 @@
-#main.py
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
@@ -10,17 +9,23 @@ from dotenv import load_dotenv
 import logging
 import json
 import os
+
+# Load environment variables
 load_dotenv()
 
-# Retrieve FIREBASE_ADMIN_JSON from environment
-firebase_json = os.getenv("FIREBASE_ADMIN_JSON")
-if not firebase_json:
-    raise ValueError("Firebase Admin JSON is missing in the environment variables.")
-if isinstance(firebase_json, str):  # For JSON string in .env
-    firebase_json = json.loads(firebase_json)
-# Parse JSON and initialize Firebase
-cred = credentials.Certificate((firebase_json))
+# Retrieve the path to the Firebase Admin JSON file
+firebase_json_path = os.getenv("FIREBASE_ADMIN_JSON")
+if not firebase_json_path or not os.path.exists(firebase_json_path):
+    raise ValueError(f"Firebase Admin JSON path is missing or invalid: {firebase_json_path}")
+
+# Load the JSON from the file
+with open(firebase_json_path, "r") as f:
+    firebase_json = json.load(f)
+
+# Initialize Firebase Admin SDK
+cred = credentials.Certificate(firebase_json)
 initialize_app(cred)
+
 # Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router, get_current_user
 from src.notifications.fcm_controller import router as fcm_router
@@ -60,6 +65,7 @@ app.include_router(poll_router, prefix="/polls", tags=["Polls"])
 app.include_router(feedback_router, prefix="/feedback", tags=["Feedback"])
 app.include_router(voting_router, prefix="/voting", tags=["Voting"])
 app.include_router(fcm_router, prefix="/fcm", tags=["FCM"])
+
 # Root endpoint for serving index.html
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
