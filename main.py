@@ -14,12 +14,12 @@ load_dotenv()
 
 # Retrieve FIREBASE_ADMIN_JSON from environment
 firebase_json = os.getenv("FIREBASE_ADMIN_JSON")
-if not firebase_json or not os.path.exists(firebase_json):
+if not firebase_json:
     raise ValueError("Firebase Admin JSON is missing in the environment variables.")
-with open(firebase_json, "r") as f:
-    firebase_json = json.load(f)
+if isinstance(firebase_json, str):  # For JSON string in .env
+    firebase_json = json.loads(firebase_json)
 # Parse JSON and initialize Firebase
-cred = credentials.Certificate(json.loads(firebase_json))
+cred = credentials.Certificate((firebase_json))
 initialize_app(cred)
 # Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router, get_current_user
