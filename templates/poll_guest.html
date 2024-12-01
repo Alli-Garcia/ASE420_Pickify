@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poll Guest Access</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <header>
+        <h1>Welcome to the Poll!</h1>
+        <p>Participate in this poll as a guest.</p>
+    </header>
+
+    <section class="poll-container">
+        <h2>{{ poll.activity_title }}</h2>
+        <p><strong>Question:</strong> {{ poll.poll_question }}</p>
+
+        <form action="/polls/{{ poll._id }}/vote" method="post">
+            {% if poll.type == "multiple_choice" %}
+                <h3>Options:</h3>
+                {% for option in poll.options %}
+                    <div class="option">
+                        <label>
+                            <input type="radio" name="option" value="{{ option }}" required> {{ option }}
+                        </label>
+                    </div>
+                {% endfor %}
+            {% elif poll.type == "q_and_a" %}
+                <h3>Your Answer:</h3>
+                <textarea name="answer" rows="4" cols="50" placeholder="Type your answer here..." required></textarea>
+            {% elif poll.type == "wordcloud" %}
+                <h3>Enter a Word:</h3>
+                <input type="text" name="word" placeholder="Type a word..." required>
+            {% endif %}
+
+            <!-- Include guest email -->
+            <input type="hidden" name="email" value="{{ email }}">
+
+            <button type="submit" class="btn-submit">Submit Your Response</button>
+        </form>
+    </section>
+
+    <footer>
+        <p>Powered by Pickify</p>
+    </footer>
+</body>
+
+</html>
