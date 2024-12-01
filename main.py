@@ -56,6 +56,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # Skip authentication for specific endpoints like /register and /login
+    if request.url.path not in ["/auth/register", "/auth/login"]:
+        token = request.cookies.get("Authorization")
+        if not token or not token.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Not authenticated")
+    response = await call_next(request)
+    return response
+
 # Static Files and Templates Setup
 static_path = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
