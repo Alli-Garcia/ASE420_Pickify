@@ -12,8 +12,8 @@ import os
 FIREBASE_ADMIN_JSON = os.getenv("FIREBASE_ADMIN_JSON")
 if not FIREBASE_ADMIN_JSON:
     raise ValueError("Firebase Admin JSON is missing in the environment variables.")
+print(FIREBASE_ADMIN_JSON)
 cred = credentials.Certificate(json.loads(FIREBASE_ADMIN_JSON))
-
 initialize_app(cred)
 # Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router, get_current_user
