@@ -4,34 +4,11 @@ from starlette.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from firebase_admin import initialize_app, credentials
 from bson import ObjectId
-from dotenv import load_dotenv
 import logging
-import json
-import os
 
-# Load environment variables
-load_dotenv()
-print(f"MONGODB_URI: {os.getenv('MONGODB_URI')}")
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
-ALGORITHM = "HS256"
-if SECRET_KEY == "default_secret_key":
-    raise ValueError("JWT_SECRET_KEY is not set in environment variables.")  # Use a fallback for safety
-
-firebase_json_path = os.getenv("FIREBASE_ADMIN_JSON")
-if not firebase_json_path:
-    raise ValueError(f"Firebase Admin JSON path is missing or invalid: {firebase_json_path}")
-
-with open(firebase_json_path, "r") as f:
-    firebase_json = json.load(f)
-
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate(firebase_json)
-initialize_app(cred)
-
-# Import routers from their respective modules
+# Import application configuration from centralized file
+from src.config import SECRET_KEY, ALGORITHM, MONGODB_URI, firebase_json_path
 from src.authentication.auth_controller import router as auth_router, get_current_user
 from src.notifications.fcm_controller import router as fcm_router
 from src.polls.poll_controller import router as poll_router
@@ -39,10 +16,16 @@ from src.feedback.feedback_controller import router as feedback_router
 from src.voting.voting_controller import router as voting_router
 from src.shared import templates, polls_collection
 from src.websockets.connection_manager import ConnectionManager
+from src.authentication.utils import initialize_firebase
+
+# Initialize Firebase Admin SDK
+initialize_firebase()
 
 # Create an instance of FastAPI
 app = FastAPI()
 manager = ConnectionManager()
+
+# Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -52,6 +35,7 @@ logging.basicConfig(
     ]
 )
 
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],  # Replace with your frontend origin

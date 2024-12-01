@@ -4,29 +4,43 @@ from jose import jwt, JWTError
 import bcrypt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
+from firebase_admin import credentials, initialize_app
+import firebase_admin
 import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
 
-# Load environment variables or set defaults
-SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")  # Fallback to "default_secret_key" if not set
-if SECRET_KEY == "default_secret_key":
-    logging.warning("SECRET_KEY is not set in the environment. Using a default insecure key.")
+from dotenv import load_dotenv
+load_dotenv()
+
+# Validate environment variables
+required_env_vars = ["SECRET_KEY", "FIREBASE_ADMIN_JSON", "SMTP_SERVER", "SMTP_PORT", "EMAIL_ADDRESS", "EMAIL_PASSWORD"]
+missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_env_vars:
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_env_vars)}")
+
+# Load environment variables
+SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+firebase_json_path = os.getenv("FIREBASE_ADMIN_JSON")
+SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_PORT = int(os.getenv("SMTP_PORT"))
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
-# Email Configuration (set in your environment)
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "your_email@example.com")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_password")
+# Firebase Initialization
+def initialize_firebase():
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(firebase_json_path)
+        initialize_app(cred)
 
 # OAuth2 password bearer token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Function to create a JWT token
+# JWT Token Functions
 def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
     to_encode = data.copy()
     if "sub" not in to_encode:
@@ -36,54 +50,59 @@ def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# Function to verify a JWT token
-def verify_token(token: str) -> str:
+def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise JWTError("Invalid token: Missing `sub` claim.")
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token: Missing 'sub' claim.")
         return username
     except JWTError as e:
         logging.error(f"Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-# Function to retrieve the current user
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     return verify_token(token)
 
-# Function to hash a password
+# Password Functions
 def hash_password(password: str) -> str:
+    logging.debug("Hashing password")
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
     return hashed.decode("utf-8")
 
-# Function to verify a password against a hashed password
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    result = bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    logging.debug(f"Password verification result: {result}")
+    return result
 
-# Function to send an email
-def send_email(recipients: List[str], subject: str, body: str):
-    if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-        raise HTTPException(status_code=500, detail="Email configuration is missing")
-    
+# Email Sending
+def send_email(recipients, subject, body):
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    email_address = os.getenv("EMAIL_ADDRESS")
+    email_password = os.getenv("EMAIL_PASSWORD")
+
+    if not smtp_server or not email_address or not email_password:
+        raise Exception("SMTP configuration is missing in environment variables")
+
     try:
-        # Set up the email server
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()  # Upgrade connection to secure
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        # Set up the SMTP server
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(email_address, email_password)
 
-        # Construct the email
+        # Create the email
         message = MIMEMultipart()
-        message["From"] = EMAIL_ADDRESS
+        message["From"] = email_address
         message["To"] = ", ".join(recipients)
         message["Subject"] = subject
         message.attach(MIMEText(body, "plain"))
 
         # Send the email
-        server.sendmail(EMAIL_ADDRESS, recipients, message.as_string())
+        server.sendmail(email_address, recipients, message.as_string())
         server.quit()
-        logging.info(f"Email sent successfully to: {recipients}")
+        print(f"Email sent successfully to: {recipients}")
     except Exception as e:
-        logging.error(f"Failed to send email: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
+        print(f"Failed to send email: {e}")
+        raise
