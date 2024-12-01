@@ -13,8 +13,8 @@ import os
 
 # Load environment variables
 load_dotenv()
-print("MONGODB_USERNAME:", os.getenv("MONGODB_USERNAME"))
-print("MONGODB_PASSWORD:", os.getenv("MONGODB_PASSWORD"))
+print(f"MONGODB_URI: {os.getenv('MONGODB_URI')}")
+
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 if SECRET_KEY == "default_secret_key":
