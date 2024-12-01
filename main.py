@@ -15,19 +15,19 @@ import os
 load_dotenv()
 print("MONGODB_USERNAME:", os.getenv("MONGODB_USERNAME"))
 print("MONGODB_PASSWORD:", os.getenv("MONGODB_PASSWORD"))
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")  # Use a fallback for safety
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
+if SECRET_KEY == "default_secret_key":
+    raise ValueError("JWT_SECRET_KEY is not set in environment variables.")  # Use a fallback for safety
 ALGORITHM = "HS256"
-firebase_json_path = os.getenv("FIREBASE_ADMIN_JSON")
-if not firebase_json_path or not os.path.exists(firebase_json_path):
-    raise ValueError(f"Firebase Admin JSON path is missing or invalid: {firebase_json_path}")
+# Read Firebase Admin JSON content from the environment
+firebase_json_content = os.getenv("FIREBASE_ADMIN_JSON_CONTENT")
+if not firebase_json_content:
+    raise ValueError("Firebase Admin JSON content is missing in environment variables.")
 
-# Load the JSON from the file
-with open(firebase_json_path, "r") as f:
-    firebase_json = json.load(f)
+# Parse the JSON content
+firebase_json = json.loads(firebase_json_content)
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate(firebase_json)
-initialize_app(cred)
+from firebase_config import cred
 
 # Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router, get_current_user

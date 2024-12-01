@@ -13,7 +13,17 @@ MONGODB_URI = f"mongodb+srv://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@pickify.1ozx
 
 # Initialize Async MongoDB Client
 client = AsyncIOMotorClient(MONGODB_URI)
-database = client.get_database("pickify_db")
+database = client["pickify_db"]
 
-# Collections
+polls_collection = database["polls"]
+users_collection = database["users"]
 device_tokens_collection = database["device_tokens"]
+
+# Test the database connection
+async def test_connection():
+    try:
+        # Ping the database to check connection
+        await database.command("ping")
+        print("Connected to MongoDB successfully!")
+    except Exception as e:
+        print(f"Failed to connect to MongoDB: {e}")

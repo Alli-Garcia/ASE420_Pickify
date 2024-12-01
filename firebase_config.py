@@ -1,18 +1,15 @@
 import os
 import firebase_admin
+import json
 from firebase_admin import credentials
 
-# Load environment variables from .env if using python-dotenv
-from dotenv import load_dotenv
+# Load environment variables
+firebase_json_content = os.getenv("FIREBASE_ADMIN_JSON_CONTENT")
+if not firebase_json_content:
+    raise ValueError("Firebase Admin JSON content is missing in environment variables.")
 
-load_dotenv()
+# Parse the JSON content
+cred = credentials.Certificate(json.loads(firebase_json_content))
 
-# Get the path to the credentials from an environment variable
-firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS")
-
-# Use the path to initialize the Firebase Admin SDK
-if firebase_credentials_path is None:
-    raise ValueError("FIREBASE_CREDENTIALS environment variable is not set.")
-
-cred = credentials.Certificate("ASE420_Pickify\config\firebase-adminsdk.json")
+# Initialize Firebase Admin SDK
 firebase_admin.initialize_app(cred)
