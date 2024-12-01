@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ poll['activity_title'] }}</title>
+</head>
+<body>
+    <h1>{{ poll['poll_question'] }}</h1>
+    <form method="POST" action="/polls/{{ poll['_id'] }}/vote">
+        {% for option in poll['options'] %}
+        <div>
+            <input type="radio" id="{{ option }}" name="option" value="{{ option }}" required>
+            <label for="{{ option }}">{{ option }}</label>
+        </div>
+        {% endfor %}
+        <button type="submit">Vote</button>
+    </form>
+</body>
+</html>

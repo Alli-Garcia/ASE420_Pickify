@@ -3,33 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ poll['activity_title'] }}</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <title>Available Polls</title>
 </head>
 <body>
-    <div class="container">
-        <h1>{{ poll['poll_question'] }}</h1>
+    <h1>Available Polls</h1>
 
-        <!-- The form that dynamically displays based on the poll type -->
-        <form method="post" action="/polls/{{ poll['_id'] }}/vote">
-            {% if poll['type'] == 'multiple_choice' %}
-                <h3>Multiple Choice Options:</h3>
-                {% for option in poll['options'] %}
-                    <input type="radio" id="{{ option }}" name="option" value="{{ option }}" required>
-                    <label for="{{ option }}">{{ option }}</label><br>
-                {% endfor %}
-            {% elif poll['type'] == 'q_and_a' %}
-                <h3>Q&A Poll:</h3>
-                <textarea id="answer" name="answer" rows="5" required placeholder="Enter your answer here"></textarea><br><br>
-            {% elif poll['type'] == 'wordcloud' %}
-                <h3>Word Cloud Poll:</h3>
-                <input type="text" id="word" name="word" placeholder="Enter a word" required><br><br>
-            {% endif %}
-            <br>
-            <button type="submit">Submit</button>
-        </form>
-    </div>
+    <!-- Form to select poll type -->
+    <h2>Create a New Poll</h2>
+    <form action="/polls/create/type" method="post">
+        <label for="poll_type">Select Poll Type:</label>
+        <select id="poll_type" name="poll_type" required>
+            <option value="multiple_choice">Multiple Choice</option>
+            <option value="q_and_a">Q&A</option>
+            <option value="wordcloud">Word Cloud</option>
+        </select>
+        <button type="submit">Next</button>
+    </form>
+    <hr>
 
-    <script src="/static/app.js"></script>
+    <!-- Existing polls -->
+    {% if polls %}
+        <ul>
+            {% for poll in polls %}
+                <li>
+                    <a href="/polls/{{ poll['_id'] }}">{{ poll['activity_title'] }}</a>
+                    <p>Type: {{ poll['type'] }}</p>
+                    <p>Question: {{ poll['poll_question'] }}</p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p> </p>
+    {% endif %}
 </body>
 </html>

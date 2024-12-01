@@ -1,26 +1,30 @@
+#poll_controller.py
 from fastapi import APIRouter, HTTPException, Depends, Form, Request
-from fastapi.responses import HTMLResponse
-from src.authentication.utils import verify_token, get_current_user
+from fastapi.responses import HTMLResponse, RedirectResponse
+from src.authentication.auth_controller import get_current_user
 from src.notifications.fcm_manager import send_notification
 from src.websockets.connection_manager import manager
 from datetime import datetime, timedelta, timezone
 from src.database import database
 from bson import ObjectId
 from typing import List
-from firebase_admin import messaging
-from src.shared import templates
-
+from src.shared import templates, polls_collection
+import logging
 router = APIRouter()
 
 # Polls collection from MongoDB
 polls_collection = database.get_collection("polls")
 
-# Function to get current user based on token
-def get_current_user(token: str = Depends(verify_token)):
-    username = verify_token(token)
-    if username is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return username
+@router.get("/", response_class=HTMLResponse)
+async def list_polls(request: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        polls_cursor = polls_collection.find({})
+        polls = await polls_cursor.to_list(length=100)
+        print(polls)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Unable to fetch polls at this time")
+
+    return templates.TemplateResponse("polls.html", {"request": request, "polls": polls, "current_user": current_user})
 
 @router.post("/create")
 async def create_poll(
@@ -28,13 +32,17 @@ async def create_poll(
     add_people: str = Form(...),
     set_timer: int = Form(...),
     poll_question: str = Form(...),
-    num_options: int = Form(...),
-    options: List[str] = Form(...),
+    num_options: int = Form(None),
+    options: List[str] = Form(None),
+    poll_type: str = Form(...),
     current_user: str = Depends(get_current_user)
 ):
     # Ensure only authenticated users can create polls
     if not current_user:
         raise HTTPException(status_code=401, detail="User not authenticated")
+
+    if poll_type == "multiple_choice" and (not options or len(options) < 2):
+        raise HTTPException(status_code=400, detail="Multiple-choice polls require at least two options")
 
     # Split the participants (comma-separated emails)
     participants = [email.strip() for email in add_people.split(",") if email.strip()]
@@ -49,37 +57,58 @@ async def create_poll(
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=set_timer),
         "status": "active",
         "poll_question": poll_question,
-        "options": options,
-        "votes": {option: 0 for option in options},
+        "options": options or [],
+        "type" : poll_type,
+        "votes": {option: 0 for option in options or []},
     }
 
     # Insert the poll into MongoDB
     result = await polls_collection.insert_one(poll)
 
     # Confirm the poll was inserted
-    if result.inserted_id:
-        notification_title = f"New Poll: {activity_title}"
-        notification_body = f"A new poll has been created: '{poll_question}'. You have been added as a participant."
-
-        for participant in participants:
-            await send_notification(participant, notification_title, notification_body)
-
-        return {
-            "message": "Poll created successfully",
-            "poll_id": str(result.inserted_id),
-            "poll": poll,
-            "share_link": f"/polls/{result.inserted_id}"
-        }
-    else:
+    if not result.inserted_id:
         raise HTTPException(status_code=500, detail="Failed to create poll")
+
+    # Send notifications to participants
+    poll_link = f"http://localhost:8000/polls/{result.inserted_id}"  # Adjust for production
+    notification_title = f"New Poll: {activity_title}"
+    notification_body = f"Participate in the poll: '{poll_question}'. Click here: {poll_link}"
+
+    for participant in participants:
+    # Sanitize the participant email to create a valid topic name
+        topic_name = participant.replace("@", "_").replace(".", "_")
+    try:
+        await send_notification(topic_name, notification_title, notification_body)
+    except Exception as e:
+        logging.error(f"Failed to send notification to {participant} (topic: {topic_name}): {e}")
+
+
+    # Redirect to the dashboard for the newly created poll
+    return RedirectResponse(url=f"/analytics/{result.inserted_id}", status_code=303)
+
+@router.get("/create", response_class=HTMLResponse)
+async def create_poll_form(request: Request, poll_type: str, current_user: dict = Depends(get_current_user)):
+    if poll_type not in ["multiple_choice", "q_and_a", "wordcloud"]:
+        raise HTTPException(status_code=400, detail="Invalid poll type")
+
+    return templates.TemplateResponse(
+        "create_poll.html",
+        {"request": request, "poll_type": poll_type, "current_user": current_user},
+    )
+
+@router.post("/create/type")
+async def choose_poll_type(poll_type: str = Form(...)):
+    if poll_type not in ["multiple_choice", "q_and_a", "wordcloud"]:
+        raise HTTPException(status_code=400, detail="Invalid poll type")
+    return RedirectResponse(url=f"/polls/create?poll_type={poll_type}", status_code=303)
 
 @router.get("/{poll_id}", response_class=HTMLResponse)
 async def view_poll(poll_id: str, request: Request, current_user: str = Depends(get_current_user)):
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
-
-    return templates.TemplateResponse("poll.html", {"request": Request, "poll": poll, "current_user": current_user})
+    print(f"Poll retrieved: {poll}")
+    return templates.TemplateResponse("poll.html", {"request": request, "poll": poll, "current_user": current_user})
 
 @router.get("/list")
 async def list_polls(current_user: str = Depends(get_current_user)):
@@ -174,6 +203,33 @@ async def my_polls(current_user: str = Depends(get_current_user)):
     user_polls_cursor = polls_collection.find({"participants": current_user})
     user_polls = await user_polls_cursor.to_list(length=100)
     return user_polls
+
+
+@router.get("/dashboard/{poll_id}", response_class=HTMLResponse)
+async def view_dashboard(poll_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    # Retrieve the poll
+    poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
+
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+
+    # Calculate analytics
+    total_votes = sum(poll["votes"].values())
+    participation_rate = len(poll["participants"])
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "poll_id": poll_id,
+            "poll_title": poll.get("activity_title"),
+            "poll_question": poll.get("poll_question", ""),
+            "total_votes" : sum(poll["votes"].values()),
+            "participation_rate": len(poll["participants"]),
+            "option_votes": poll["votes"],
+        },
+    )
+
 
 @router.get("/analytics/{poll_id}")
 async def poll_analytics(poll_id: str, current_user: str = Depends(get_current_user)):

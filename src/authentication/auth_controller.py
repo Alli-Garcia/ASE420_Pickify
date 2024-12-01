@@ -1,13 +1,14 @@
 # src/authentication/auth_controller.py
 
-from fastapi import APIRouter, HTTPException, Depends, Response, Form
+from fastapi import APIRouter, HTTPException, Depends, Response, Request, Form
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
-from .models import User
 from .utils import create_access_token, verify_password, hash_password
 from src.database import database
-import bcrypt
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 # Initialize APIRouter for this module
 router = APIRouter()
@@ -22,11 +23,6 @@ users_collection = database.get_collection("users")
 
 # OAuth2 Password Bearer token URL (used to fetch the access token)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8')
 
 @router.post("/register")
 async def register_user(
@@ -66,21 +62,45 @@ async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
     # Create a JWT access token for the authenticated user
     access_token = create_access_token(data={"sub": user["username"]})
     response = RedirectResponse(url="/polls", status_code=303)
-    response.set_cookie(key="Authorization", value=f"Bearer {access_token}", httponly=True)
+    response.set_cookie(
+        key="Authorization", 
+        value=f"Bearer {access_token}", 
+        httponly=True, 
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        samesite="lax",
+        path="/"
+        )
     return response
 
 # Utility function to get the current authenticated user using the provided JWT token
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(request: Request):
+    # Attempt to retrieve the token from cookies
+    token = request.cookies.get("Authorization")
+    if token and token.startswith("Bearer "):
+        token = token[7:]  # Remove the "Bearer " prefix
+
+    logging.debug(f"Token retrieved from cookie: {token}")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Decode the JWT token
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+
+        # Retrieve the user from the database
         user = await users_collection.find_one({"username": username})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+
+        logging.debug(f"Authenticated user: {username}")
         return user
-    except JWTError:
+    except JWTError as e:
+        logging.error(f"JWT decoding error: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.get("/users/me")

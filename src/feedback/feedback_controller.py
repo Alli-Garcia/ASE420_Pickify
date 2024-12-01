@@ -62,6 +62,14 @@ async def list_feedback(poll_id: str):
 
     return feedback_for_poll
 
+from src.notifications.fcm_manager import send_feedback_notification
+
+async def notify_feedback_submitted(user_device_token, feedback_message):
+    title = "New Feedback Received"
+    body = feedback_message
+    send_feedback_notification(user_device_token, title, body)
+
+
 @router.get("/poll/{poll_id}/comments")
 async def get_poll_feedback(poll_id: str, current_user: str = Depends(get_current_user)):
     # Ensure the poll exists

@@ -19,10 +19,11 @@
         <!-- General Poll Information -->
         <div class="poll-info">
             <h2>Poll Information</h2>
-            <p><strong>Title:</strong> <span id="poll-title"></span></p>
-            <p><strong>Question:</strong> <span id="poll-question"></span></p>
-            <p><strong>Total Participants:</strong> <span id="total-participants"></span></p>
-            <p><strong>Total Votes:</strong> <span id="total-votes"></span></p>
+            <p><strong>Title:</strong> {{ poll_title }}</p>
+            <p><strong>Question:</strong> {{ poll_question }}</p>
+            <p><strong>Total Participants:</strong> {{ participation_rate }}</p>
+            <p><strong>Total Votes:</strong> {{ total_votes }}</p>
+            <p><strong>Poll Link:</strong> <a id="poll-link" href="" target="_blank">Click to share</a></p>
         </div>
 
         <!-- Votes Chart -->
@@ -43,7 +44,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", async function () {
             // Replace 'pollId' with the actual poll ID from your URL or context
-            const pollId = "your_poll_id_here";
+            const pollId = "{{ poll_id }}";
 
             // Fetch analytics data from the server
             try {

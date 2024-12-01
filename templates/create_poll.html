@@ -6,16 +6,27 @@
     <title>Create a Poll</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pollType = urlParams.get("poll_type") || "multiple_choice";
+            const pollTypeSelect = document.getElementById("poll_type");
+
+            if (pollType) {
+                pollTypeSelect.value = pollType;
+                updatePollType();
+            }
+        });
+
         function updatePollType() {
             const pollType = document.getElementById("poll_type").value;
             const optionsContainer = document.getElementById("options_container");
-            const numOptionsField = document.getElementById("num_options");
+            const numOptionsField = document.getElementById("num_options_field");
 
             if (pollType === "multiple_choice") {
                 numOptionsField.style.display = "block";
                 optionsContainer.innerHTML = "";
-                numOptionsField.addEventListener('change', generateOptions);
-            } else if (pollType === "q_and_a" || pollType === "wordcloud") {
+                document.getElementById("num_options").addEventListener('change', generateOptions);
+            } else {
                 numOptionsField.style.display = "none";
                 optionsContainer.innerHTML = "";
             }
@@ -58,13 +69,18 @@
                 <select id="poll_type" name="poll_type" onchange="updatePollType()" required>
                     <option value="multiple_choice">Multiple Choice</option>
                     <option value="q_and_a">Q&A</option>
-                    <option value="wordcloud">Wordcloud</option>
+                    <option value="wordcloud">Word Cloud</option>
                 </select>
             </div>
             <br>
-            <div id="num_options_field">
-                <label for="num_options" style="display: block;" id="num_options_label">Number of Options:</label>
-                <input type="number" id="num_options" name="num_options" min="1" max="10" onchange="generateOptions()" required>
+            <div>
+                <label for="poll_question">Poll Question:</label>
+                <textarea id="poll_question" name="poll_question" rows="3" required></textarea>
+            </div>
+            <br>
+            <div id="num_options_field" style="display: none;">
+                <label for="num_options">Number of Options:</label>
+                <input type="number" id="num_options" name="num_options" min="1" max="10" onchange="generateOptions()">
             </div>
             <br>
             <div id="options_container"></div>
