@@ -14,9 +14,10 @@ load_dotenv()
 
 # Retrieve FIREBASE_ADMIN_JSON from environment
 firebase_json = os.getenv("FIREBASE_ADMIN_JSON")
-if not firebase_json:
+if not firebase_json or not os.path.exists(firebase_json):
     raise ValueError("Firebase Admin JSON is missing in the environment variables.")
-
+with open(firebase_json, "r") as f:
+    firebase_json = json.load(f)
 # Parse JSON and initialize Firebase
 cred = credentials.Certificate(json.loads(firebase_json))
 initialize_app(cred)
