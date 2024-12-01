@@ -1,0 +1,8 @@
+[{
+  "_id": {
+    "$oid": "674b8372ea6fb2b0dc39a6e6"
+  },
+  "username": "alli",
+  "email": "alligarcia2021@gmail.com",
+  "hashed_password": "$2b$12$eynGtEaui7Y3hooCsPYxce8lIuL8g70iGdWUJvw6F3AVkxAUl3kTW"
+}]

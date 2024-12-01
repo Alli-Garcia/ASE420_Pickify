@@ -7,7 +7,13 @@ from pathlib import Path
 from firebase_admin import initialize_app, credentials
 from bson import ObjectId
 import logging
-cred = credentials.Certificate("config/firebase-adminsdk.json")
+import json
+import os
+FIREBASE_ADMIN_JSON = os.getenv("FIREBASE_ADMIN_JSON")
+if not FIREBASE_ADMIN_JSON:
+    raise ValueError("Firebase Admin JSON is missing in the environment variables.")
+cred = credentials.Certificate(json.loads(FIREBASE_ADMIN_JSON))
+
 initialize_app(cred)
 # Import routers from their respective modules
 from src.authentication.auth_controller import router as auth_router, get_current_user
