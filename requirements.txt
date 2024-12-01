@@ -16,3 +16,4 @@ aiofiles==23.1.0
 starlette==0.26.1
 pymongo>=4.9,<4.10
 python-dotenv>=0.21.0
+python-multipart==0.0.18
