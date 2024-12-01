@@ -12,7 +12,8 @@ import os
 
 # Load environment variables
 load_dotenv()
-
+print("MONGODB_USERNAME:", os.getenv("MONGODB_USERNAME"))
+print("MONGODB_PASSWORD:", os.getenv("MONGODB_PASSWORD"))
 # Retrieve the path to the Firebase Admin JSON file
 firebase_json_path = os.getenv("FIREBASE_ADMIN_JSON")
 if not firebase_json_path or not os.path.exists(firebase_json_path):
