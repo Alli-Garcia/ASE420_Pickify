@@ -103,9 +103,8 @@ async def get_current_user(request: Request):
     logging.debug(f"Token retrieved from cookie: {token}")
 
     if not token:
-        logging.error("Authentication token not found in cookies.")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
+        logging.info("No token provided, proceeding as unauthenticated.")
+        return None
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")

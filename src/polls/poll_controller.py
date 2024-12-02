@@ -104,9 +104,10 @@ async def create_poll(
 
 @router.get("/guest/{email}", response_class=HTMLResponse)
 async def guest_access_poll(email: str, poll_id: str, request: Request):
-    # Find the poll
+    logging.debug(f"Guest access: email={email}, poll_id={poll_id}")
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
+        logging.error(f"Poll not found: {poll_id}")
         raise HTTPException(status_code=404, detail="Poll not found")
 
     # Allow guest access
@@ -137,6 +138,7 @@ async def choose_poll_type(poll_type: str = Form(...)):
 
 @router.get("/{poll_id}", response_class=HTMLResponse)
 async def view_poll(poll_id: str, request: Request, current_user: str = Depends(get_current_user)):
+    logging.debug(f"Authenticated poll access: poll_id={poll_id}, user={current_user}")
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
@@ -209,13 +211,23 @@ async def vote_on_poll(
     email: str = Form(None),  # Add email for guests
     current_user: dict = Depends(get_current_user)
 ):
+    logging.debug(f"Vote submission: poll_id={poll_id}, option={option}, answer={answer}, word={word}, email={email}, user={current_user}")
+    
     # Retrieve the poll
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
+        logging.error(f"Poll not found: {poll_id}")
         raise HTTPException(status_code=404, detail="Poll not found")
 
     # Determine the voter (authenticated user or guest email)
-    voter = current_user["username"] if current_user else email
+    if current_user:
+        voter = current_user["username"]
+    elif email:
+        voter = email
+    else:
+        raise HTTPException(status_code=400, detail="Authentication or email is required to vote.")
+    
+    logging.debug(f"Poll: {poll_id}, Voter: {voter}, Option: {option}, Email: {email}")
 
     # Check if the voter has already voted
     if voter in poll.get("voters", []):
@@ -223,30 +235,31 @@ async def vote_on_poll(
 
     # Record the vote based on poll type
     if poll["type"] == "multiple_choice":
-        if option not in poll["options"]:
+        if option not in poll["options"] or not option:
             raise HTTPException(status_code=400, detail="Invalid poll option")
         await polls_collection.update_one(
             {"_id": ObjectId(poll_id)},
             {"$inc": {f"votes.{option}": 1}, "$push": {"voters": voter}}
         )
-    elif poll["type"] == "q_and_a":
-        if not answer:
-            raise HTTPException(status_code=400, detail="Answer cannot be empty")
+    elif poll["type"] == "q_and_a" and answer:
         await polls_collection.update_one(
             {"_id": ObjectId(poll_id)},
             {"$push": {"answers": {"user": voter, "answer": answer}}, "$push": {"voters": voter}}
         )
-    elif poll["type"] == "wordcloud":
-        if not word:
-            raise HTTPException(status_code=400, detail="Word cannot be empty")
+    elif poll["type"] == "wordcloud" and word:
         await polls_collection.update_one(
             {"_id": ObjectId(poll_id)},
             {"$push": {"words": {"word": word, "count": 1}}, "$push": {"voters": voter}}
         )
+    else:
+        raise HTTPException(status_code=400, detail="Invalid vote data")
 
     # Redirect to the dashboard
-    return RedirectResponse(url=f"/polls/dashboard/{poll_id}", status_code=303)
-
+    dashboard_url = f"/polls/dashboard/{poll_id}"
+    if email:
+        dashboard_url += f"?email={email}"
+    logging.debug(f"Redirecting to: {dashboard_url}")
+    return RedirectResponse(url=dashboard_url, status_code=303)
 @router.get("/my_polls")
 async def my_polls(current_user: str = Depends(get_current_user)):
     # Find polls where the current user is a participant
@@ -257,7 +270,8 @@ async def my_polls(current_user: str = Depends(get_current_user)):
 
 @router.get("/dashboard/{poll_id}", response_class=HTMLResponse)
 async def view_dashboard(poll_id: str, request: Request, current_user: dict = Depends(get_current_user)):
-    # Retrieve the poll
+    logging.debug(f"Dashboard access: poll_id={poll_id}, current_user={current_user}")
+
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
@@ -265,8 +279,9 @@ async def view_dashboard(poll_id: str, request: Request, current_user: dict = De
     # Determine if the user is the creator or a participant
     user_email = current_user["email"] if current_user else request.query_params.get("email")
     is_creator = current_user and current_user["username"] == poll["creator"]
-    is_participant = user_email and user_email in poll.get("participants", [])
-
+    is_participant = (current_user and current_user["username"] in poll.get("participants", [])) or (
+        user_email and user_email in poll.get("participants", [])
+    )
     if not (is_creator or is_participant):
         logging.warning(f"Unauthorized access attempt to poll {poll_id} by {user_email or 'unauthenticated user'}")
         raise HTTPException(status_code=403, detail="User not authorized to view this poll")
@@ -275,7 +290,7 @@ async def view_dashboard(poll_id: str, request: Request, current_user: dict = De
     total_votes = sum(poll["votes"].values())
     participation_rate = len(poll["participants"])
     option_votes = poll["votes"]
-
+    logging.debug(f"User authorized for dashboard: poll_id={poll_id}, user_email={user_email}")
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -286,6 +301,7 @@ async def view_dashboard(poll_id: str, request: Request, current_user: dict = De
             "total_votes": total_votes,
             "participation_rate": participation_rate,
             "option_votes": option_votes,
+            "poll_url": f"https://pickify.onrender.com/polls/{poll_id}"
         },
     )
 
@@ -298,7 +314,13 @@ async def poll_analytics(poll_id: str, request: Request, current_user: str = Dep
 
     # Ensure the current user is either the creator or a participant
     guest_email = request.query_params.get("email")
-    if not (current_user and current_user["username"] in poll["participants"]) and guest_email not in poll["participants"]:
+    is_authorized = (
+        (current_user and current_user["username"] == poll["creator"]) or
+        (current_user and current_user["username"] in poll.get("participants", [])) or
+        (guest_email and guest_email in poll.get("participants", []))
+    )
+
+    if not is_authorized:
         raise HTTPException(status_code=403, detail="User not authorized to view analytics")
 
     # Prepare analytics data

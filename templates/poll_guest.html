@@ -18,7 +18,8 @@
         <h2>{{ poll.activity_title }}</h2>
         <p><strong>Question:</strong> {{ poll.poll_question }}</p>
 
-        <form action="/polls/{{ poll._id }}/vote" method="post">
+        <form id="vote-form" action="/polls/{{ poll._id }}/vote" method="post">
+            <input type="hidden" name="email" value="{{ email }}">
             {% if poll.type == "multiple_choice" %}
                 <h3>Options:</h3>
                 {% for option in poll.options %}
@@ -35,12 +36,9 @@
                 <h3>Enter a Word:</h3>
                 <input type="text" name="word" placeholder="Type a word..." required>
             {% endif %}
-
-            <!-- Include guest email -->
-            <input type="hidden" name="email" value="{{ email }}">
-
             <button type="submit" class="btn-submit">Submit Your Response</button>
         </form>
+        
     </section>
 
     <footer>
