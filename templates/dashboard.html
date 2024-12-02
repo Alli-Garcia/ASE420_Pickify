@@ -55,109 +55,54 @@
             </ul>
         </div>
     </section>
-
     <script>
-        document.addEventListener("DOMContentLoaded", async function () {
-            const pollId = "{{ poll_id }}";
-            const feedbackForm = document.getElementById("feedback-form");
-            const feedbackMessage = document.getElementById("feedback-message");
-
-            // Fetch Poll Analytics Data for Chart
-            async function loadChart() {
-                try {
-                    const response = await fetch(`/polls/analytics/${pollId}`);
-                    if (!response.ok) throw new Error("Failed to fetch analytics data");
-
-                    const data = await response.json();
-                    const chartLabels = Object.keys(data.option_votes);
-                    const chartData = Object.values(data.option_votes);
-
-                    const ctx = document.getElementById("votesChart").getContext("2d");
-                    new Chart(ctx, {
-                        type: "bar",
-                        data: {
-                            labels: chartLabels,
-                            datasets: [
-                                {
-                                    label: "# of Votes",
-                                    data: chartData,
-                                    backgroundColor: "rgba(54, 162, 235, 0.5)",
-                                    borderColor: "rgba(54, 162, 235, 1)",
-                                    borderWidth: 1,
-                                },
-                            ],
-                        },
-                        options: {
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                },
-                            },
-                        },
-                    });
-                } catch (error) {
-                    console.error("Error rendering chart:", error);
+    document.addEventListener("DOMContentLoaded", async function () {
+        const pollId = "{{ poll_id }}";
+        const email = new URLSearchParams(window.location.search).get("email");
+    
+        async function loadChart() {
+            try {
+                const analyticsUrl = email
+                    ? `/polls/analytics/${pollId}?email=${encodeURIComponent(email)}`
+                    : `/polls/analytics/${pollId}`;
+                const response = await fetch(analyticsUrl);
+    
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch analytics data: ${response.status}`);
                 }
-            }
-
-            // Fetch and Display Existing Feedback
-            async function loadFeedback() {
-                try {
-                    let feedbackResponse = await fetch(`/feedback/list?poll_id=${pollId}`);
-                    if (!feedbackResponse.ok) throw new Error("Failed to fetch feedback");
-
-                    let feedbackData = await feedbackResponse.json();
-                    const feedbackList = document.getElementById("feedback-list");
-                    feedbackList.innerHTML = ""; // Clear existing content
-                    if (feedbackData.length === 0) {
-                        feedbackList.innerHTML = "<li>No feedback yet</li>";
-                    } else {
-                        feedbackData.forEach(feedback => {
-                            let li = document.createElement("li");
-                            li.textContent = `${feedback.commenter}: ${feedback.comment}`;
-                            feedbackList.appendChild(li);
-                        });
+    
+                const data = await response.json();
+                const chartLabels = Object.keys(data.option_votes);
+                const chartData = Object.values(data.option_votes);
+    
+                const ctx = document.getElementById('votesChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            label: '# of Votes',
+                            data: chartData,
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
                     }
-                } catch (error) {
-                    console.error("Error loading feedback:", error);
-                }
+                });
+            } catch (error) {
+                console.error("Error rendering chart:", error);
+                alert("Failed to load analytics data.");
             }
-
-            // Submit New Feedback
-            feedbackForm.addEventListener("submit", async function (e) {
-                e.preventDefault();
-                const comment = document.getElementById("feedback-comment").value.trim();
-                if (!comment) {
-                    feedbackMessage.textContent = "Comment cannot be empty.";
-                    return;
-                }
-                try {
-                    const response = await fetch(`/feedback/add`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            poll_id: pollId,
-                            comment: comment,
-                        }),
-                    });
-                    if (!response.ok) throw new Error("Failed to submit feedback");
-                    feedbackMessage.style.color = "green";
-                    feedbackMessage.textContent = "Feedback submitted successfully.";
-                    document.getElementById("feedback-comment").value = ""; // Clear the input
-                    loadFeedback(); // Reload feedback
-                } catch (error) {
-                    console.error("Error submitting feedback:", error);
-                    feedbackMessage.style.color = "red";
-                    feedbackMessage.textContent = "Failed to submit feedback.";
-                }
-            });
-
-            // Initial load of chart and feedback
-            loadChart();
-            loadFeedback();
-        });
+        }
+    
+        loadChart();
+    });
+    
     </script>
 
 </body>
