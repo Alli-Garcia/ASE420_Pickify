@@ -214,7 +214,7 @@ async def vote_on_poll(
         raise HTTPException(status_code=404, detail="Poll not found")
 
     # Determine the voter
-    voter = current_user if current_user else email
+    voter = current_user["username"] if current_user else email
 
     # Check if the voter has already voted
     if voter in poll.get("voters", []):
