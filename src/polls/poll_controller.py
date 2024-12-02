@@ -266,9 +266,13 @@ async def view_dashboard(poll_id: str, request: Request, current_user: dict = De
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
-    # Determine if the user is authenticated or a guest
+    # Determine if the user is the creator or a participant
     user_email = current_user["email"] if current_user else request.query_params.get("email")
-    if not user_email or user_email not in poll.get("participants", []):
+    is_creator = current_user and current_user["username"] == poll["creator"]
+    is_participant = user_email and user_email in poll.get("participants", [])
+
+    if not (is_creator or is_participant):
+        logging.warning(f"Unauthorized access attempt to poll {poll_id} by {user_email or 'unauthenticated user'}")
         raise HTTPException(status_code=403, detail="User not authorized to view this poll")
 
     # Calculate analytics
