@@ -99,7 +99,7 @@ async def create_poll(
         except Exception as e:
             logging.error(f"Failed to send email to {guest['email']}: {e}")
 
-    return {"message": "Poll created successfully"}
+    return RedirectResponse(url=f"/polls/dashboard/{poll_id}", status_code=303)
 
 
 @router.get("/guest/{email}", response_class=HTMLResponse)
