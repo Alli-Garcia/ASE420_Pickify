@@ -207,16 +207,15 @@ async def vote_on_poll(
     answer: str = Form(None),
     word: str = Form(None),
     email: str = Form(None),  # Add email for guests
-    current_user: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
+    # Retrieve the poll
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
     # Determine the voter (authenticated user or guest email)
-    voter = current_user["email"] if current_user else email
-    if not voter:
-        raise HTTPException(status_code=400, detail="Voter email is required")
+    voter = current_user["username"] if current_user else email
 
     # Check if the voter has already voted
     if voter in poll.get("voters", []):
@@ -245,11 +244,8 @@ async def vote_on_poll(
             {"$push": {"words": {"word": word, "count": 1}}, "$push": {"voters": voter}}
         )
 
-    # Redirect to the dashboard, passing the email for guest users
-    redirect_url = f"/polls/dashboard/{poll_id}"
-    if not current_user:
-        redirect_url += f"?email={email}"
-    return RedirectResponse(url=redirect_url, status_code=303)
+    # Redirect to the dashboard
+    return RedirectResponse(url=f"/polls/dashboard/{poll_id}", status_code=303)
 
 @router.get("/my_polls")
 async def my_polls(current_user: str = Depends(get_current_user)):

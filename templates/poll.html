@@ -7,7 +7,7 @@
 </head>
 <body>
     <h1>{{ poll['poll_question'] }}</h1>
-    <form method="POST" action="/polls/{{ poll['_id'] }}/vote">
+    <form method="POST" action="/polls/{{ poll_id }}/vote">
         {% for option in poll['options'] %}
         <div>
             <input type="radio" id="{{ option }}" name="option" value="{{ option }}" required>
