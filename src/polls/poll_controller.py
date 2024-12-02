@@ -290,14 +290,15 @@ async def view_dashboard(poll_id: str, request: Request, current_user: dict = De
     )
 
 @router.get("/analytics/{poll_id}")
-async def poll_analytics(poll_id: str, current_user: str = Depends(get_current_user)):
+async def poll_analytics(poll_id: str, request: Request, current_user: str = Depends(get_current_user)):
     # Ensure the poll exists
     poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
     # Ensure the current user is either the creator or a participant
-    if current_user != poll["creator"] and current_user not in poll["participants"]:
+    guest_email = request.query_params.get("email")
+    if not (current_user and current_user["username"] in poll["participants"]) and guest_email not in poll["participants"]:
         raise HTTPException(status_code=403, detail="User not authorized to view analytics")
 
     # Prepare analytics data
