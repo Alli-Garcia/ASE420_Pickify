@@ -90,11 +90,14 @@ async def create_poll(
 
     # Send emails to unregistered users with guest links
     for guest in guest_links:
-        send_email(
-            to=guest["email"],
-            subject=f"You're invited to a poll: {activity_title}",
-            body=f"Click the link to participate: {guest['link']}"
-        )
+        try:
+            send_email(
+                recipients=[guest["email"]],
+                subject=f"You're invited to a poll: {activity_title}",
+                body=f"Click the link to participate: {guest['link']}"
+            )
+        except Exception as e:
+            logging.error(f"Failed to send email to {guest['email']}: {e}")
 
     return {"message": "Poll created successfully"}
 

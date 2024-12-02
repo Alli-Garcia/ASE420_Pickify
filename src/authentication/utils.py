@@ -77,7 +77,27 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return result
 
 # Email Sending
-def send_email(recipients, subject, body):
+def send_email(recipients: List[str], subject: str, body: str):
+    logging.info(f"Attempting to send email to: {recipients}")
+    try:
+        # Setup SMTP server connection
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        logging.info("SMTP server login successful")
+
+        # Create and send the email
+        message = MIMEMultipart()
+        message["From"] = EMAIL_ADDRESS
+        message["To"] = ", ".join(recipients)
+        message["Subject"] = subject
+        message.attach(MIMEText(body, "plain"))
+        server.sendmail(EMAIL_ADDRESS, recipients, message.as_string())
+        server.quit()
+        logging.info("Email sent successfully")
+    except Exception as e:
+        logging.error(f"Error sending email: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = int(os.getenv("SMTP_PORT", 587))
     email_address = os.getenv("EMAIL_ADDRESS")
