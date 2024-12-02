@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 
 <head>
@@ -13,6 +13,10 @@
     <header>
         <h1>Pickify Analytics Dashboard</h1>
         <p>View analytics for your poll performance and participation insights</p>
+        <nav>
+            <a href="/polls/shared-with-me" class="nav-link">Polls Shared with Me</a>
+            <a href="/polls/created-by-me" class="nav-link">Polls Created by Me</a>
+        </nav>
     </header>
 
     <section id="analytics-content">
@@ -23,7 +27,7 @@
             <p><strong>Question:</strong> <span id="poll-question">{{ poll_question }}</span></p>
             <p><strong>Total Participants:</strong> <span id="total-participants">{{ participation_rate }}</span></p>
             <p><strong>Total Votes:</strong> <span id="total-votes">{{ total_votes }}</span></p>
-            <p><strong>Poll Link:</strong> <a id="poll-link" href="" target="_blank" aria-label="Share poll link">Click to share</a></p>
+            <p><strong>Poll Link:</strong> <a id="poll-link" href="{{ poll_url }}" target="_blank" aria-label="Share poll link">Click to share</a></p>
         </div>
 
         <!-- Votes Chart -->
@@ -33,88 +37,128 @@
         </div>
 
         <!-- Feedback Section -->
-<div class="feedback-section">
-    <h2>Comments and Feedback</h2>
-    
-    <!-- Feedback Form -->
-    <form id="feedback-form">
-        <textarea id="feedback-comment" placeholder="Write your comment here..." required></textarea><br>
-        <button type="submit">Submit Comment</button>
-    </form>
-    
-    <!-- Error or Success Messages -->
-    <div id="feedback-message" style="color: red;"></div>
-    
-    <!-- Feedback List -->
-    <ul id="feedback-list">
-        <li>No feedback yet</li>
-    </ul>
-</div>
+        <div class="feedback-section">
+            <h2>Comments and Feedback</h2>
 
-<script>
-    document.addEventListener("DOMContentLoaded", async function () {
-        const pollId = "{{ poll_id }}";
-        const feedbackForm = document.getElementById("feedback-form");
-        const feedbackMessage = document.getElementById("feedback-message");
+            <!-- Feedback Form -->
+            <form id="feedback-form">
+                <textarea id="feedback-comment" placeholder="Write your comment here..." required></textarea><br>
+                <button type="submit">Submit Comment</button>
+            </form>
 
-        // Fetch and Display Existing Feedback
-        async function loadFeedback() {
-            try {
-                let feedbackResponse = await fetch(`/feedback/list?poll_id=${pollId}`);
-                if (!feedbackResponse.ok) throw new Error("Failed to fetch feedback");
+            <!-- Error or Success Messages -->
+            <div id="feedback-message" style="color: red;"></div>
 
-                let feedbackData = await feedbackResponse.json();
-                const feedbackList = document.getElementById("feedback-list");
-                feedbackList.innerHTML = ""; // Clear existing content
-                if (feedbackData.length === 0) {
-                    feedbackList.innerHTML = "<li>No feedback yet</li>";
-                } else {
-                    feedbackData.forEach(feedback => {
-                        let li = document.createElement("li");
-                        li.textContent = `${feedback.commenter}: ${feedback.comment}`;
-                        feedbackList.appendChild(li);
+            <!-- Feedback List -->
+            <ul id="feedback-list">
+                <li>No feedback yet</li>
+            </ul>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", async function () {
+            const pollId = "{{ poll_id }}";
+            const feedbackForm = document.getElementById("feedback-form");
+            const feedbackMessage = document.getElementById("feedback-message");
+
+            // Fetch Poll Analytics Data for Chart
+            async function loadChart() {
+                try {
+                    const response = await fetch(`/polls/analytics/${pollId}`);
+                    if (!response.ok) throw new Error("Failed to fetch analytics data");
+
+                    const data = await response.json();
+                    const chartLabels = Object.keys(data.option_votes);
+                    const chartData = Object.values(data.option_votes);
+
+                    const ctx = document.getElementById("votesChart").getContext("2d");
+                    new Chart(ctx, {
+                        type: "bar",
+                        data: {
+                            labels: chartLabels,
+                            datasets: [
+                                {
+                                    label: "# of Votes",
+                                    data: chartData,
+                                    backgroundColor: "rgba(54, 162, 235, 0.5)",
+                                    borderColor: "rgba(54, 162, 235, 1)",
+                                    borderWidth: 1,
+                                },
+                            ],
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                },
+                            },
+                        },
                     });
+                } catch (error) {
+                    console.error("Error rendering chart:", error);
                 }
-            } catch (error) {
-                console.error("Error loading feedback:", error);
             }
-        }
 
-        // Submit New Feedback
-        feedbackForm.addEventListener("submit", async function (e) {
-            e.preventDefault();
-            const comment = document.getElementById("feedback-comment").value.trim();
-            if (!comment) {
-                feedbackMessage.textContent = "Comment cannot be empty.";
-                return;
+            // Fetch and Display Existing Feedback
+            async function loadFeedback() {
+                try {
+                    let feedbackResponse = await fetch(`/feedback/list?poll_id=${pollId}`);
+                    if (!feedbackResponse.ok) throw new Error("Failed to fetch feedback");
+
+                    let feedbackData = await feedbackResponse.json();
+                    const feedbackList = document.getElementById("feedback-list");
+                    feedbackList.innerHTML = ""; // Clear existing content
+                    if (feedbackData.length === 0) {
+                        feedbackList.innerHTML = "<li>No feedback yet</li>";
+                    } else {
+                        feedbackData.forEach(feedback => {
+                            let li = document.createElement("li");
+                            li.textContent = `${feedback.commenter}: ${feedback.comment}`;
+                            feedbackList.appendChild(li);
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error loading feedback:", error);
+                }
             }
-            try {
-                const response = await fetch(`/feedback/add`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        poll_id: pollId,
-                        comment: comment
-                    })
-                });
-                if (!response.ok) throw new Error("Failed to submit feedback");
-                feedbackMessage.style.color = "green";
-                feedbackMessage.textContent = "Feedback submitted successfully.";
-                document.getElementById("feedback-comment").value = ""; // Clear the input
-                loadFeedback(); // Reload feedback
-            } catch (error) {
-                console.error("Error submitting feedback:", error);
-                feedbackMessage.style.color = "red";
-                feedbackMessage.textContent = "Failed to submit feedback.";
-            }
+
+            // Submit New Feedback
+            feedbackForm.addEventListener("submit", async function (e) {
+                e.preventDefault();
+                const comment = document.getElementById("feedback-comment").value.trim();
+                if (!comment) {
+                    feedbackMessage.textContent = "Comment cannot be empty.";
+                    return;
+                }
+                try {
+                    const response = await fetch(`/feedback/add`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            poll_id: pollId,
+                            comment: comment,
+                        }),
+                    });
+                    if (!response.ok) throw new Error("Failed to submit feedback");
+                    feedbackMessage.style.color = "green";
+                    feedbackMessage.textContent = "Feedback submitted successfully.";
+                    document.getElementById("feedback-comment").value = ""; // Clear the input
+                    loadFeedback(); // Reload feedback
+                } catch (error) {
+                    console.error("Error submitting feedback:", error);
+                    feedbackMessage.style.color = "red";
+                    feedbackMessage.textContent = "Failed to submit feedback.";
+                }
+            });
+
+            // Initial load of chart and feedback
+            loadChart();
+            loadFeedback();
         });
-
-        // Initial load of feedback
-        loadFeedback();
-    });
-</script>
+    </script>
 
 </body>
 

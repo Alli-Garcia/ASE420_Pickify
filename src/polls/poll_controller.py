@@ -273,7 +273,7 @@ async def view_dashboard(poll_id: str, request: Request, current_user: dict = De
     total_votes = sum(poll["votes"].values())
     participation_rate = len(poll["participants"])
     option_votes = poll["votes"]
-
+    poll_url = f"https://pickify.onrender.com/polls/{poll_id}"
     return templates.TemplateResponse(
         "dashboard.html",
         {
