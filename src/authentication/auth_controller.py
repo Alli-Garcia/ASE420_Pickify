@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Response, Request, Form
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse
+from datetime import datetime, timezone
 from jose import JWTError, jwt
 from src.authentication.utils import create_access_token, verify_password, hash_password, initialize_firebase
 from src.database import users_collection
@@ -48,7 +49,7 @@ async def register_user(username: str = Form(...), email: str = Form(...), passw
         "username": username,
         "email": email,
         "hashed_password": hashed_password,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     }
     logging.debug(f"Inserting new user into the database: {new_user}")
 

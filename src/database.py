@@ -1,21 +1,17 @@
+# database.py
 from motor.motor_asyncio import AsyncIOMotorClient
-import os
+from src.config import MONGODB_URI  # Import from your config, already loaded by dotenv
 import logging
-
-# MongoDB URI
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
-if not MONGODB_URI:
-    raise ValueError("MONGODB_URI is not set in environment variables.")
 
 # Async MongoDB client
 client = AsyncIOMotorClient(MONGODB_URI)
-database = client["pickify_db"]
+database = client.get_database("pickify_db")  # Make sure this database name matches your URI
 
 # Collections
-users_collection = database["users"]
-polls_collection = database["polls"]
-feedback_collection = database["feedback"]
-device_tokens_collection = database["device_tokens"]
+users_collection = database.get_collection("users")
+polls_collection = database.get_collection("polls")
+feedback_collection = database.get_collection("feedback")
+device_tokens_collection = database.get_collection("device_tokens")
 
 async def test_connection():
     """Test MongoDB connection."""
@@ -23,4 +19,4 @@ async def test_connection():
         await client.admin.command('ping')
         logging.info("MongoDB connected successfully.")
     except Exception as e:
-        logging.error(f"MongoDB connection failed: {e}")
+        logging.error(f"MongoDB connection failed: {e}", exc_info=True)

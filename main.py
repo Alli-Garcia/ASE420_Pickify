@@ -18,7 +18,7 @@ from src.voting.voting_controller import router as voting_router
 from src.shared import templates, polls_collection
 from src.websockets.connection_manager import ConnectionManager
 from src.authentication.utils import initialize_firebase
-from database import test_connection
+from src.database import test_connection
 
 # Initialize Firebase Admin SDK
 initialize_firebase()
