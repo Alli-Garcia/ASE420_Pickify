@@ -1,3 +1,4 @@
+#main.py
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
@@ -17,6 +18,7 @@ from src.voting.voting_controller import router as voting_router
 from src.shared import templates, polls_collection
 from src.websockets.connection_manager import ConnectionManager
 from src.authentication.utils import initialize_firebase
+from database import test_connection
 
 # Initialize Firebase Admin SDK
 initialize_firebase()
@@ -38,7 +40,7 @@ logging.basicConfig(
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Replace with your frontend origin
+    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000", "http://localhost:3000"],  # Replace with your frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,6 +85,11 @@ app.include_router(fcm_router, prefix="/fcm", tags=["FCM"])
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.on_event("startup")
+async def startup_event():
+    await test_connection()
+
 
 # WebSocket endpoint for poll updates
 @app.websocket("/ws/polls/{poll_id}")

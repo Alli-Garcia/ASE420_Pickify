@@ -1,24 +1,26 @@
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import MongoClient
 import os
+import logging
 
-MONGODB_URI = os.getenv("MONGODB_URI")
+# MongoDB URI
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
 if not MONGODB_URI:
-    raise ValueError("MONGODB_URI environment variable is not set.")
-# Initialize Async MongoDB Client
+    raise ValueError("MONGODB_URI is not set in environment variables.")
+
+# Async MongoDB client
 client = AsyncIOMotorClient(MONGODB_URI)
 database = client["pickify_db"]
 
-polls_collection = database["polls"]
+# Collections
 users_collection = database["users"]
+polls_collection = database["polls"]
+feedback_collection = database["feedback"]
 device_tokens_collection = database["device_tokens"]
 
-# Test the database connection
 async def test_connection():
+    """Test MongoDB connection."""
     try:
-        # Use the admin database to ping MongoDB
-        admin_db = client["admin"]
-        await admin_db.command("ping")
-        print("Connected to MongoDB successfully!")
+        await client.admin.command('ping')
+        logging.info("MongoDB connected successfully.")
     except Exception as e:
-        print(f"Failed to connect to MongoDB: {e}")
+        logging.error(f"MongoDB connection failed: {e}")

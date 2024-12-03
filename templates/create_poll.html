@@ -4,17 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create a Poll</title>
-    <link rel="stylesheet" href="/static/styles.css">
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const urlParams = new URLSearchParams(window.location.search);
-            const pollType = urlParams.get("poll_type") || "multiple_choice";
-            const pollTypeSelect = document.getElementById("poll_type");
+            const pollType = urlParams.get("poll_type");
 
-            if (pollType) {
-                pollTypeSelect.value = pollType;
-                updatePollType();
+            if (!pollType) {
+                alert("Poll type is missing. Redirecting to poll selection.");
+                window.location.href = "/polls";
+                return;
             }
+
+            document.getElementById("poll_type").value = pollType;
+            updatePollType();
         });
 
         function updatePollType() {
@@ -35,7 +37,7 @@
         function generateOptions() {
             const numOptions = document.getElementById("num_options").value;
             const optionsContainer = document.getElementById("options_container");
-            optionsContainer.innerHTML = ""; // Clear previous options
+            optionsContainer.innerHTML = "";
             for (let i = 0; i < numOptions; i++) {
                 optionsContainer.innerHTML += `
                     <label for="option_${i + 1}">Option ${i + 1}:</label>
@@ -46,49 +48,35 @@
     </script>
 </head>
 <body>
-    <div class="container">
-        <h1>Create Your Poll</h1>
-        <form id="poll-form" action="/polls/create" method="POST">
-            <div class="form-group">
-                <label for="activity_title">Activity Title:</label>
-                <input type="text" id="activity_title" name="activity_title" required>
-            </div>
-            <br>
-            <div class="form-group">
-                <label for="add_people">Add People (Emails, separated by commas):</label>
-                <input type="text" id="add_people" name="add_people" placeholder="example1@mail.com, example2@mail.com">
-            </div>
-            <br>
-            <div class="form-group">
-                <label for="set_timer">Set Timer (minutes):</label>
-                <input type="number" id="set_timer" name="set_timer" min="1" required>
-            </div>
-            <br>
-            <div class="form-group">
-                <label for="poll_type">Poll Type:</label>
-                <select id="poll_type" name="poll_type" onchange="updatePollType()" required>
-                    <option value="multiple_choice">Multiple Choice</option>
-                    <option value="q_and_a">Q&A</option>
-                    <option value="wordcloud">Word Cloud</option>
-                </select>
-            </div>
-            <br>
-            <div>
-                <label for="poll_question">Poll Question:</label>
-                <textarea id="poll_question" name="poll_question" rows="3" required></textarea>
-            </div>
-            <br>
-            <div id="num_options_field" style="display: none;">
-                <label for="num_options">Number of Options:</label>
-                <input type="number" id="num_options" name="num_options" min="1" max="10" onchange="generateOptions()">
-            </div>
-            <br>
-            <div id="options_container"></div>
-            <br>
-            <div class="form-actions">
-                <button type="submit" class="btn-save">Save</button>
-            </div>
-        </form>
-    </div>
+    <h1>Create Your Poll</h1>
+    <form action="/polls/create" method="POST">
+        <label for="activity_title">Activity Title:</label>
+        <input type="text" id="activity_title" name="activity_title" required><br><br>
+
+        <label for="add_people">Add People (Emails):</label>
+        <input type="text" id="add_people" name="add_people" placeholder="email1@mail.com, email2@mail.com"><br><br>
+
+        <label for="set_timer">Set Timer (minutes):</label>
+        <input type="number" id="set_timer" name="set_timer" min="1" required><br><br>
+
+        <label for="poll_type">Poll Type:</label>
+        <select id="poll_type" name="poll_type" onchange="updatePollType()" required>
+            <option value="multiple_choice">Multiple Choice</option>
+            <option value="q_and_a">Q&A</option>
+            <option value="wordcloud">Word Cloud</option>
+        </select><br><br>
+
+        <label for="poll_question">Poll Question:</label>
+        <textarea id="poll_question" name="poll_question" rows="3" required></textarea><br><br>
+
+        <div id="num_options_field" style="display: none;">
+            <label for="num_options">Number of Options:</label>
+            <input type="number" id="num_options" name="num_options" min="2" onchange="generateOptions()">
+        </div><br>
+
+        <div id="options_container"></div><br>
+
+        <button type="submit">Create Poll</button>
+    </form>
 </body>
 </html>
