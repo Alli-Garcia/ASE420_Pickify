@@ -27,53 +27,57 @@ router = APIRouter()
 # OAuth2 token scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+
 @router.post("/register")
 async def register_user(username: str = Form(...), email: str = Form(...), password: str = Form(...)):
     """
     Handles user registration.
-    Ensures the user is added to the database, or raises appropriate errors.
+    Ensures the user is added to the database or raises appropriate errors.
     """
-    logging.info(f"Attempting to register user: {username}, {email}")
+    logging.info(f"Attempting to register user: username={username}, email={email}")
 
-    # Check if user already exists
-    existing_user = await users_collection.find_one({"$or": [{"username": username}, {"email": email}]})
-    if existing_user:
-        logging.warning(f"User already exists: username={username}, email={email}")
-        return RedirectResponse(url="/login?message=Already%20registered", status_code=303)
-
-    # Hash the password
-    hashed_password = hash_password(password)
-
-    # User data to insert
-    new_user = {
-        "username": username,
-        "email": email,
-        "hashed_password": hashed_password,
-        "created_at": datetime.now(timezone.utc),
-    }
-    logging.debug(f"Inserting new user into the database: {new_user}")
-
-    # Insert user into the database
     try:
-        result = await users_collection.insert_one(new_user)
-        if not result.inserted_id:
-            logging.error("Failed to insert user into the database.")
-            raise HTTPException(status_code=500, detail="Failed to register user")
-        logging.info(f"User registered successfully: {username}")
-    except Exception as e:
-        logging.error(f"Database error while registering user: {e}")
-        raise HTTPException(status_code=500, detail="An error occurred during registration")
+        # Check if the user already exists
+        existing_user = await users_collection.find_one({"$or": [{"username": username}, {"email": email}]})
+        if existing_user:
+            logging.warning(f"User already exists: username={username}, email={email}")
+            return RedirectResponse(url="/login?message=Already%20registered", status_code=303)
 
-    # Auto-login after successful registration
-    token = create_access_token(data={"sub": username})
-    response = RedirectResponse(url="/polls", status_code=303)
-    response.set_cookie(
-        key="Authorization",
-        value=f"Bearer {token}",
-        httponly=True,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
-    return response
+        # Hash the password
+        hashed_password = hash_password(password)
+        logging.debug(f"Hashed password: {hashed_password}")
+
+        # Prepare user data
+        new_user = {
+            "username": username,
+            "email": email,
+            "hashed_password": hashed_password,
+            "created_at": datetime.now(timezone.utc),
+        }
+        logging.debug(f"Prepared user data for insertion: {new_user}")
+
+        # Insert the user into the database
+        result = await users_collection.insert_one(new_user)
+        logging.debug(f"Insert operation result: {result.inserted_id}")
+        if not result.inserted_id:
+            raise ValueError("Insert operation returned no ID.")
+
+        logging.info(f"User registered successfully: username={username}")
+
+        # Generate and return JWT token
+        token = create_access_token(data={"sub": username})
+        response = RedirectResponse(url="/polls", status_code=303)
+        response.set_cookie(
+            key="Authorization",
+            value=f"Bearer {token}",
+            httponly=True,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+        return response
+
+    except Exception as e:
+        logging.error(f"Error during registration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred during registration")
 
 
 @router.post("/login")
@@ -82,34 +86,35 @@ async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
     Handles user login.
     Verifies credentials and returns a JWT token.
     """
-    logging.info(f"Attempting to log in user: {form_data.username}")
+    logging.info(f"Attempting to log in user: username={form_data.username}")
 
-    # Retrieve the user from the database
     try:
+        # Retrieve the user from the database
         user = await users_collection.find_one({"username": form_data.username})
         if not user:
-            logging.warning(f"Login failed: username {form_data.username} not found.")
+            logging.warning(f"Login failed: username={form_data.username} not found.")
             raise HTTPException(status_code=400, detail="Invalid credentials")
+
+        # Verify the password
+        if not verify_password(form_data.password, user["hashed_password"]):
+            logging.warning(f"Login failed: incorrect password for user {form_data.username}")
+            raise HTTPException(status_code=400, detail="Invalid credentials")
+
+        # Generate and return JWT token
+        token = create_access_token(data={"sub": user["username"]})
+        response = RedirectResponse(url="/polls", status_code=303)
+        response.set_cookie(
+            key="Authorization",
+            value=f"Bearer {token}",
+            httponly=True,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+        logging.info(f"User logged in successfully: {form_data.username}")
+        return response
+
     except Exception as e:
-        logging.error(f"Database error during login for user {form_data.username}: {e}")
+        logging.error(f"Error during login for user {form_data.username}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred during login")
-
-    # Verify the password
-    if not verify_password(form_data.password, user["hashed_password"]):
-        logging.warning(f"Login failed: incorrect password for user {form_data.username}")
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-
-    # Generate JWT token
-    token = create_access_token(data={"sub": user["username"]})
-    response = RedirectResponse(url="/polls", status_code=303)
-    response.set_cookie(
-        key="Authorization",
-        value=f"Bearer {token}",
-        httponly=True,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
-    logging.info(f"User logged in successfully: {form_data.username}")
-    return response
 
 
 async def get_current_user(request: Request):
@@ -121,21 +126,22 @@ async def get_current_user(request: Request):
         logging.warning("Authentication failed: token missing or invalid.")
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    token = token[7:]  # Remove "Bearer " prefix
     try:
+        # Decode and validate the token
+        token = token[7:]  # Remove "Bearer " prefix
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not username:
-            logging.error("Invalid token payload: 'sub' is missing.")
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Invalid token: Missing 'sub' claim.")
 
+        # Retrieve the user from the database
         user = await users_collection.find_one({"username": username})
         if not user:
-            logging.warning(f"User not found for token payload: {username}")
             raise HTTPException(status_code=401, detail="User not found")
         return user
+
     except JWTError as e:
-        logging.error(f"JWT decoding error: {e}")
+        logging.error(f"JWT decoding error: {e}", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid token")
 
 

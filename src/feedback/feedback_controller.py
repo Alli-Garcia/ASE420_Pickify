@@ -74,6 +74,12 @@ async def add_feedback(
         logging.error(f"Unexpected error while adding feedback: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while adding feedback")
 
+def is_valid_objectid(id_str):
+    try:
+        ObjectId(id_str)
+        return True
+    except:
+        return False
 
 # List Feedback
 @router.get("/list")

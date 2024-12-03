@@ -1,7 +1,9 @@
 # database.py
 from motor.motor_asyncio import AsyncIOMotorClient
+from datetime import datetime, timezone
 from src.config import MONGODB_URI  # Import from your config, already loaded by dotenv
 import logging
+import asyncio
 
 # Async MongoDB client
 client = AsyncIOMotorClient(MONGODB_URI)
@@ -20,3 +22,24 @@ async def test_connection():
         logging.info("MongoDB connected successfully.")
     except Exception as e:
         logging.error(f"MongoDB connection failed: {e}", exc_info=True)
+        raise
+
+async def test_insert():
+    logging.debug("Starting test_insert function")
+    client = AsyncIOMotorClient("mongodb://127.0.0.1:27017")
+    db = client["pickify_db"]
+    users = db["users"]
+
+    new_user = {
+        "username": "testuser",
+        "email": "test@example.com",
+        "hashed_password": "hashed_test_password",
+        "created_at": datetime.now(timezone.utc)
+    }
+    logging.debug(f"Inserting new user: {new_user}")
+
+    result = await users.insert_one(new_user)
+    logging.debug(f"Insert result: {result.inserted_id}")
+    print(f"Inserted user ID: {result.inserted_id}")
+
+asyncio.run(test_insert())

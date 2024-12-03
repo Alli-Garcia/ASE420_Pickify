@@ -9,7 +9,11 @@ load_dotenv()
 # Configure logging at the top to ensure any issues are logged properly
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("app.log"),  # Log to file
+        logging.StreamHandler()          # Also log to console
+    ]
 )
 
 # Retrieve secret key for JWT
@@ -26,6 +30,8 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 if not MONGODB_URI:
     logging.critical("MONGODB_URI is not set in the environment variables. Unable to connect to the database.")
     raise ValueError("MONGODB_URI is not set in the environment variables.")
+logging.debug(f"MONGODB_URI: {MONGODB_URI}")
+logging.debug(f"SECRET_KEY: {SECRET_KEY}")
 
 # Retrieve Firebase Admin JSON path
 firebase_json_path = os.getenv("FIREBASE_ADMIN_JSON")

@@ -18,7 +18,7 @@ from src.voting.voting_controller import router as voting_router
 from src.shared import templates, polls_collection
 from src.websockets.connection_manager import ConnectionManager
 from src.authentication.utils import initialize_firebase
-from src.database import test_connection
+from src.database import test_connection, database
 
 # Initialize Firebase Admin SDK
 initialize_firebase()
@@ -46,7 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
+'''@app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     # Skip authentication for specific endpoints like /register and /login
     public_routes = ["/auth/register", "/auth/login", "/", "/static"]
@@ -68,7 +68,7 @@ async def auth_middleware(request: Request, call_next):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    return await call_next(request)
+    return await call_next(request) '''
 
 # Static Files and Templates Setup
 static_path = Path(__file__).parent / "static"
