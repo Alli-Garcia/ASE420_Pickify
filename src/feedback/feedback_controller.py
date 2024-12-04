@@ -14,6 +14,16 @@ from pydantic import BaseModel, ValidationError
 
 router = APIRouter()
 
+# Utility function to serialize MongoDB documents
+def serialize_document(doc):
+    if isinstance(doc, dict):
+        return {key: serialize_document(value) for key, value in doc.items()}
+    elif isinstance(doc, list):
+        return [serialize_document(item) for item in doc]
+    elif isinstance(doc, ObjectId):
+        return str(doc)
+    return doc
+
 # Collections
 feedback_collection = database.get_collection("feedback")
 polls_collection = database.get_collection("polls")
@@ -55,7 +65,7 @@ async def add_feedback(
         commenter = current_user or guest_email or "Anonymous"
         # Prepare feedback data
         feedback_data = {
-            "poll_id": poll_id,
+            "poll_id": str(poll_id),
             "comment": comment,
             "commenter": commenter,
             "created_at": datetime.now()
@@ -93,34 +103,39 @@ def is_valid_objectid(id_str):
 # List Feedback
 @router.get("/list")
 async def list_feedback(poll_id: str, request: Request):
-    try: 
+    try:
         logging.info(f"Fetching feedback for poll {poll_id}")
+
         if not is_valid_objectid(poll_id):
             logging.error(f"Invalid poll_id format: {poll_id}")
             raise HTTPException(status_code=400, detail="Invalid poll ID format")
 
-        # Validate Poll
+        # Retrieve the poll
         poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
         if not poll:
             logging.error(f"Poll {poll_id} not found.")
             raise HTTPException(status_code=404, detail="Poll not found")
 
+        # Authorization Check
         guest_email = request.query_params.get("email")
         is_authorized = (
             poll.get("is_public", True) or
             (guest_email and guest_email in poll.get("participants", []))
-            )
+        )
 
         if not is_authorized:
             logging.warning(f"Unauthorized access to feedback for poll {poll_id}")
             raise HTTPException(status_code=403, detail="Not authorized to view feedback")
 
         # Fetch feedback
-        feedback_cursor = feedback_collection.find({"poll_id": poll_id})
+        feedback_cursor = feedback_collection.find({"poll_id": str(poll_id)})
         feedback_list = await feedback_cursor.to_list(length=100)
-        logging.debug(f"Feedback retrieved for poll ID {poll_id}: {len(feedback_list)} entries")
 
-        return feedback_list
+        # Serialize feedback data
+        serialized_feedback = [serialize_document(feedback) for feedback in feedback_list]
+        logging.debug(f"Feedback retrieved: {serialized_feedback}")
+
+        return serialized_feedback
     except Exception as e:
         logging.error(f"Error fetching feedback for poll ID {poll_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch feedback")
