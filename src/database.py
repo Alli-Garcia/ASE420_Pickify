@@ -24,7 +24,7 @@ async def test_connection():
         logging.error(f"MongoDB connection failed: {e}", exc_info=True)
         raise
 
-async def test_insert():
+'''async def test_insert():
     logging.debug("Starting test_insert function")
     client = AsyncIOMotorClient("mongodb://127.0.0.1:27017")
     db = client["pickify_db"]
@@ -42,4 +42,4 @@ async def test_insert():
     logging.debug(f"Insert result: {result.inserted_id}")
     print(f"Inserted user ID: {result.inserted_id}")
 
-asyncio.run(test_insert())
+asyncio.run(test_insert())'''

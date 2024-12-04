@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security.utils import get_authorization_scheme_param
+from jose import JWTError, jwt
+from src.config import SECRET_KEY, ALGORITHM
 from src.authentication.auth_controller import get_current_user
 from src.notifications.fcm_manager import send_notification
 from src.authentication.utils import send_email
@@ -55,6 +58,7 @@ async def create_poll_form(request: Request, poll_type: str, current_user: dict 
 
 @router.post("/create")
 async def create_poll(
+    request: Request,
     activity_title: str = Form(...),
     add_people: str = Form(...),
     set_timer: int = Form(...),
@@ -64,7 +68,6 @@ async def create_poll(
     poll_type: str = Form(...),
     current_user: dict = Depends(get_current_user),
 ):
-    """Create a new poll."""
     try:
         if poll_type == "multiple_choice" and (not options or len(options) < 2):
             raise HTTPException(status_code=400, detail="Multiple-choice polls require at least 2 options.")
@@ -82,7 +85,8 @@ async def create_poll(
             "options": options or [],
             "type": poll_type,
             "votes": {option: 0 for option in options or []},
-            "voters": []
+            "voters": [],
+            "is_public" : True,
         }
 
         result = await polls_collection.insert_one(poll)
@@ -90,56 +94,119 @@ async def create_poll(
             raise HTTPException(status_code=500, detail="Failed to create poll.")
 
         poll_id = str(result.inserted_id)
-        return RedirectResponse(url=f"/polls/dashboard/{poll_id}", status_code=303)
-    except Exception as e:
-        logging.error(f"Error during poll creation: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred while creating the poll")
+        poll_url = f"{request.base_url}polls/{poll_id}"  # Construct poll URL
 
+
+        # Email notification
+        subject = f"You're invited to participate in a poll: {activity_title}"
+        body = (f"{current_user['username']} has invited you to participate in a poll: {poll_question}"
+        f"Click the link below to participate:\n{poll_url}\n\n")
+        send_email(participants, subject, body)
+
+        return RedirectResponse(url=f"/polls/dashboard/{result.inserted_id}", status_code=303)
+    except Exception as e:
+        logging.error(f"Error creating poll: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while creating the poll")
 
 @router.get("/{poll_id}", response_class=HTMLResponse)
-async def view_poll(poll_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+async def view_poll(poll_id: str, request: Request):
     """View a specific poll."""
-    poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
-    if not poll:
-        raise HTTPException(status_code=404, detail="Poll not found")
-    return templates.TemplateResponse("poll.html", {"request": request, "poll": poll, "current_user": current_user})
+    try:
+        # Fetch the poll from the database
+        poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
+        if not poll:
+            raise HTTPException(status_code=404, detail="Poll not found")
 
+        # Always allow access for public polls
+        if not poll.get("is_public", False):
+            logging.warning(f"Attempt to access private poll {poll_id}")
+            raise HTTPException(status_code=403, detail="This poll is private")
+
+        # Get guest email from query params
+        guest_email = request.query_params.get("email")
+        user_display = guest_email or "Guest"
+
+        logging.info(f"Rendering poll {poll_id} for user: {user_display}")
+        return templates.TemplateResponse(
+            "poll.html",
+            {"request": request, "poll": poll, "current_user": {"username": user_display}},
+        )
+    except Exception as e:
+        logging.error(f"Error accessing poll {poll_id}: {e}")
+        raise HTTPException(status_code=500, detail="Unable to load poll")
 
 @router.get("/dashboard/{poll_id}", response_class=HTMLResponse)
-async def view_dashboard(poll_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+async def view_dashboard(poll_id: str, request: Request):
     try:
         logging.debug(f"Accessing dashboard for poll ID: {poll_id}")
+
+        # Fetch the poll
         poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
         if not poll:
             logging.error(f"Poll not found: {poll_id}")
             raise HTTPException(status_code=404, detail="Poll not found")
 
-        # Check permissions
-        is_creator = current_user and current_user["username"] == poll["creator"]
-        is_participant = current_user["username"] in poll.get("participants", [])
-        if not (is_creator or is_participant):
+        # Debug fetched poll data
+        logging.debug(f"Fetched poll data: {poll} (type: {type(poll)})")
+
+        # Validate poll structure
+        if not isinstance(poll, dict):
+            logging.error(f"Invalid poll format for ID {poll_id}: {poll}")
+            raise HTTPException(status_code=500, detail="Invalid poll data format")
+
+        required_keys = ["activity_title", "poll_question", "creator", "options", "votes", "participants"]
+        missing_keys = [key for key in required_keys if key not in poll]
+        if missing_keys:
+            logging.error(f"Poll is missing required keys: {missing_keys}")
+            raise HTTPException(status_code=500, detail=f"Poll data is incomplete: {missing_keys}")
+
+        # Determine the user
+        guest_email = request.query_params.get("email")
+        current_user = None
+        token = request.cookies.get("Authorization")
+        if token:
+            try:
+                scheme, token_value = token.split(" ", 1)
+                if scheme.lower() == "bearer":
+                    payload = jwt.decode(token_value, SECRET_KEY, algorithms=[ALGORITHM])
+                    current_user = payload.get("sub")
+            except (JWTError, ValueError):
+                logging.warning("Failed to decode token for authentication. Treating as guest.")
+
+        voter_id = current_user or guest_email or "Anonymous"
+
+        # Permission checks
+        is_creator = current_user and current_user == poll.get("creator")
+        is_participant = current_user and current_user in poll.get("participants", [])
+        is_voter = voter_id in poll.get("voters", [])
+        is_public = poll.get("is_public", True)  # Default to True if not set
+
+        if not (is_creator or is_participant or is_voter or is_public):
             logging.warning(f"Unauthorized access attempt to poll {poll_id}")
             raise HTTPException(status_code=403, detail="Not authorized to view this poll")
 
-        # Fetch analytics
-        total_votes = sum(poll["votes"].values())
-        participation_rate = len(poll["participants"])
+        # Fetch analytics data
+        votes = poll.get("votes", {})
+        total_votes = sum(votes.values()) if isinstance(votes, dict) else 0
+        participation_rate = len(poll.get("participants", []))
         logging.debug(f"Dashboard data prepared for poll ID: {poll_id}")
 
+        # Render dashboard template
         return templates.TemplateResponse(
             "dashboard.html",
             {
                 "request": request,
                 "poll_id": poll_id,
-                "poll_title": poll["activity_title"],
-                "poll_question": poll["poll_question"],
+                "poll_title": poll.get("activity_title", "Untitled Poll"),
+                "poll_question": poll.get("poll_question", "No question provided"),
                 "total_votes": total_votes,
                 "participation_rate": participation_rate,
-                "option_votes": poll["votes"],
+                "option_votes": votes,
+                "current_user": voter_id,
             },
         )
     except Exception as e:
-        logging.error(f"Error accessing dashboard for poll ID {poll_id}: {e}")
+        logging.error(f"Error accessing dashboard for poll ID {poll_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Unable to load poll dashboard")
 
 @router.get("/analytics/{poll_id}")

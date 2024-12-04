@@ -15,6 +15,16 @@ import logging
 from dotenv import load_dotenv
 load_dotenv()
 
+# Logging configuration
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
+
 # Validate environment variables
 required_env_vars = ["SECRET_KEY", "FIREBASE_ADMIN_JSON", "SMTP_SERVER", "SMTP_PORT", "EMAIL_ADDRESS", "EMAIL_PASSWORD"]
 missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
@@ -80,49 +90,30 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def send_email(recipients: List[str], subject: str, body: str):
     logging.info(f"Attempting to send email to: {recipients}")
     try:
-        # Setup SMTP server connection
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        logging.info("SMTP server login successful")
+        # Validate SMTP configuration
+        if not SMTP_SERVER or not SMTP_PORT or not EMAIL_ADDRESS or not EMAIL_PASSWORD:
+            raise ValueError("SMTP configuration is missing or invalid in environment variables")
 
-        # Create and send the email
-        message = MIMEMultipart()
-        message["From"] = EMAIL_ADDRESS
-        message["To"] = ", ".join(recipients)
-        message["Subject"] = subject
-        message.attach(MIMEText(body, "plain"))
-        server.sendmail(EMAIL_ADDRESS, recipients, message.as_string())
-        server.quit()
-        logging.info("Email sent successfully")
+        logging.debug(f"SMTP_SERVER: {SMTP_SERVER}, SMTP_PORT: {SMTP_PORT}, EMAIL_ADDRESS: {EMAIL_ADDRESS}")
+
+        # Connect to SMTP server
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Start TLS encryption
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            logging.info("SMTP server login successful")
+
+            # Create email
+            message = MIMEMultipart()
+            message["From"] = EMAIL_ADDRESS
+            message["To"] = ", ".join(recipients)
+            message["Subject"] = subject
+            message.attach(MIMEText(body, "plain"))
+            logging.debug(f"Email content: Subject={subject}, Body={body}")
+
+            # Send email
+            server.sendmail(EMAIL_ADDRESS, recipients, message.as_string())
+            logging.info(f"Email sent successfully to: {recipients}")
+
     except Exception as e:
-        logging.error(f"Error sending email: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
-    smtp_server = os.getenv("SMTP_SERVER")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
-    email_address = os.getenv("EMAIL_ADDRESS")
-    email_password = os.getenv("EMAIL_PASSWORD")
-
-    if not smtp_server or not email_address or not email_password:
-        raise Exception("SMTP configuration is missing in environment variables")
-
-    try:
-        # Set up the SMTP server
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(email_address, email_password)
-
-        # Create the email
-        message = MIMEMultipart()
-        message["From"] = email_address
-        message["To"] = ", ".join(recipients)
-        message["Subject"] = subject
-        message.attach(MIMEText(body, "plain"))
-
-        # Send the email
-        server.sendmail(email_address, recipients, message.as_string())
-        server.quit()
-        print(f"Email sent successfully to: {recipients}")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-        raise
+        logging.error(f"Error while sending email: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send email")
