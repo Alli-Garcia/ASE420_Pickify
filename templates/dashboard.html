@@ -28,7 +28,11 @@
             <p><strong>Question:</strong> <span id="poll-question">{{ poll_question }}</span></p>
             <p><strong>Total Participants:</strong> <span id="total-participants">{{ participation_rate }}</span></p>
             <p><strong>Total Votes:</strong> <span id="total-votes">{{ total_votes }}</span></p>
-            <p><strong>Poll Link:</strong> <a id="poll-link" href="{{ poll_url }}" target="_blank" aria-label="Share poll link">Click to share</a></p>
+            <p><strong>Poll Link:</strong> 
+                <a id="poll-link" href="{{ poll_url }}{% if guest_email %}?email={{ guest_email }}{% endif %}" target="_blank" aria-label="Share poll link">
+                Click to share
+                </a>
+                </p>                
         </div>
 
         <!-- Votes Chart -->
@@ -55,142 +59,89 @@
         </div>
     </section>
     <script>
-    document.addEventListener("DOMContentLoaded", async function () {
-    const pollId = "{{ poll_id }}";
+        document.addEventListener("DOMContentLoaded", async function () {
+            const pollId = "{{ poll_id }}";
+            const guestEmail = new URLSearchParams(window.location.search).get("email") || null;
 
-    // Function to load and render the chart
-    async function loadChart() {
-        try {
-            const analyticsUrl = `/polls/analytics/${pollId}`;
-            console.log(`Fetching analytics data from: ${analyticsUrl}`);
+            // Function to load and render the chart
+            async function loadChart() {
+                const url = `/polls/analytics/${pollId}${guestEmail ? `?email=${guestEmail}` : ''}`;
+                try {
+                    console.log(`Fetching analytics data from: ${url}`);
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch analytics data (Status: ${response.status})`);
+                    }
+                    const data = await response.json();
 
-            const response = await fetch(analyticsUrl);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch analytics data (Status: ${response.status})`);
-            }
+                    const chartLabels = Object.keys(data.option_votes);
+                    const chartData = Object.values(data.option_votes);
 
-            const data = await response.json();
-            const chartLabels = Object.keys(data.option_votes);
-            const chartData = Object.values(data.option_votes);
+                    if (!chartLabels.length || !chartData.length) {
+                        throw new Error("No data available for rendering the chart.");
+                    }
 
-            if (!chartLabels.length || !chartData.length) {
-                throw new Error("No data available for rendering the chart.");
-            }
-
-            const ctx = document.getElementById("votesChart").getContext("2d");
-            new Chart(ctx, {
-                type: "bar",
-                data: {
-                    labels: chartLabels,
-                    datasets: [
-                        {
-                            label: "# of Votes",
-                            data: chartData,
-                            backgroundColor: "rgba(54, 162, 235, 0.5)",
-                            borderColor: "rgba(54, 162, 235, 1)",
-                            borderWidth: 1,
+                    const ctx = document.getElementById("votesChart").getContext("2d");
+                    new Chart(ctx, {
+                        type: "bar",
+                        data: {
+                            labels: chartLabels,
+                            datasets: [
+                                {
+                                    label: "# of Votes",
+                                    data: chartData,
+                                    backgroundColor: "rgba(54, 162, 235, 0.5)",
+                                    borderColor: "rgba(54, 162, 235, 1)",
+                                    borderWidth: 1,
+                                },
+                            ],
                         },
-                    ],
-                },
-                options: {
-                    scales: {
-                        y: { beginAtZero: true },
-                    },
-                },
-            });
-        } catch (error) {
-            console.error("Error rendering chart:", error);
-            alert("Failed to load and render analytics data. Please try again later.");
-        }
-    }
-
-    // Function to load and display feedback
-    async function loadFeedback() {
-        try {
-            const feedbackUrl = `/feedback/list?poll_id=${pollId}`;
-            console.log(`Fetching feedback data from: ${feedbackUrl}`);
-
-            const response = await fetch(feedbackUrl);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch feedback data (Status: ${response.status})`);
+                        options: {
+                            scales: {
+                                y: { beginAtZero: true },
+                            },
+                        },
+                    });
+                } catch (error) {
+                    console.error("Error rendering chart:", error);
+                    alert("Failed to load and render analytics data. Please try again later.");
+                }
             }
 
-            const feedbackData = await response.json();
-            console.log("Feedback data received:", feedbackData);
+            // Function to load and display feedback
+            async function loadFeedback() {
+                try {
+                    const feedbackUrl = `/feedback/list?poll_id=${pollId}${guestEmail ? `&email=${guestEmail}` : ''}`;
+                    console.log(`Fetching feedback data from: ${feedbackUrl}`);
+                    const response = await fetch(feedbackUrl);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch feedback data (Status: ${response.status})`);
+                    }
+                    const feedbackData = await response.json();
+                    console.log("Feedback data received:", feedbackData);
 
-            const feedbackList = document.getElementById("feedback-list");
-            feedbackList.innerHTML = "";
+                    const feedbackList = document.getElementById("feedback-list");
+                    feedbackList.innerHTML = "";
 
-            if (feedbackData.length === 0) {
-                feedbackList.innerHTML = "<li>No feedback yet</li>";
-            } else {
-                feedbackData.forEach((feedback) => {
-                    const li = document.createElement("li");
-                    li.textContent = `${feedback.commenter}: ${feedback.comment}`;
-                    feedbackList.appendChild(li);
-                });
+                    if (feedbackData.length === 0) {
+                        feedbackList.innerHTML = "<li>No feedback yet</li>";
+                    } else {
+                        feedbackData.forEach((feedback) => {
+                            const li = document.createElement("li");
+                            li.textContent = `${feedback.commenter}: ${feedback.comment}`;
+                            feedbackList.appendChild(li);
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error loading feedback:", error);
+                    alert("Failed to load feedback data. Please try again later.");
+                }
             }
-        } catch (error) {
-            console.error("Error loading feedback:", error);
-            alert("Failed to load feedback data. Please try again later.");
-        }
-    }
 
-    // Function to handle feedback form submission
-    async function handleFeedbackSubmission(event) {
-    event.preventDefault();
-
-    const commentInput = document.getElementById("feedback-comment");
-    let feedbackMessage = document.getElementById("feedback-message");
-
-    // Create feedbackMessage if it doesn't exist
-    if (!feedbackMessage) {
-        feedbackMessage = document.createElement("div");
-        feedbackMessage.id = "feedback-message";
-        const feedbackSection = document.querySelector(".feedback-section");
-        feedbackSection.prepend(feedbackMessage);
-    }
-
-    if (!commentInput.value.trim()) {
-        feedbackMessage.textContent = "Feedback cannot be empty.";
-        feedbackMessage.style.color = "red";
-        return;
-    }
-
-    const payload = {
-        poll_id: document.querySelector('input[name="poll_id"]').value,
-        comment: commentInput.value.trim(),
-        commenter: "Guest"  // Or dynamically determine based on user context
-    };
-
-    try {
-        const response = await fetch(`/feedback/add`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(payload)
+            // Load chart and feedback on page load
+            await loadChart();
+            await loadFeedback();
         });
-
-        if (!response.ok) {
-            throw new Error("Failed to submit feedback");
-        }
-
-        feedbackMessage.textContent = "Feedback added successfully.";
-        feedbackMessage.style.color = "green";
-        commentInput.value = "";
-
-        await loadFeedback(); // Refresh feedback list
-    } catch (error) {
-        feedbackMessage.textContent = "Failed to submit feedback. Please try again.";
-        feedbackMessage.style.color = "red";
-    }
-}
-
-    // Load both the chart and feedback on page load
-    await loadChart();
-    await loadFeedback();
-});
 
     </script>
 </body>

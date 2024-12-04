@@ -210,7 +210,7 @@ async def view_dashboard(poll_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Unable to load poll dashboard")
 
 @router.get("/analytics/{poll_id}")
-async def poll_analytics(poll_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+async def poll_analytics(poll_id: str, request: Request):
     try:
         logging.debug(f"Fetching analytics for poll ID: {poll_id}")
 
@@ -223,8 +223,7 @@ async def poll_analytics(poll_id: str, request: Request, current_user: dict = De
         # Ensure the current user is either the creator or a participant
         guest_email = request.query_params.get("email")
         is_authorized = (
-            (current_user and current_user["username"] == poll["creator"]) or
-            (current_user and current_user["username"] in poll.get("participants", [])) or
+            poll.get("is_public", True) or  # Allow access if the poll is public
             (guest_email and guest_email in poll.get("participants", []))
         )
 

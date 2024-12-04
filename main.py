@@ -18,7 +18,7 @@ from src.voting.voting_controller import router as voting_router
 from src.shared import templates, polls_collection
 from src.websockets.connection_manager import ConnectionManager
 from src.authentication.utils import initialize_firebase
-from src.database import test_connection, database
+from src.database import test_connection, feedback_collection
 
 # Initialize Firebase Admin SDK
 initialize_firebase()
@@ -89,6 +89,7 @@ async def read_root(request: Request):
 @app.on_event("startup")
 async def startup_event():
     await test_connection()
+    await feedback_collection.create_index("poll_id")
 
 
 # WebSocket endpoint for poll updates
