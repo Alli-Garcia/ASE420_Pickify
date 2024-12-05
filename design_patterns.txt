@@ -1,0 +1,29 @@
+### **Design Patterns Applied**
+1. **Factory Pattern**:
+   - Applied for handling different poll types (e.g., `multiple_choice`, `q_and_a`).
+   - Example: A factory method determines the analytics logic to use based on poll type, avoiding hardcoded checks in multiple places.
+
+2. **Template Method**:
+   - Used for the `view_dashboard` function.
+   - A base template now handles common elements of the dashboard (e.g., fetching the poll, authorization), while specific analytics (e.g., vote data, Q&A data) are handled by overridden methods.
+
+3. **Decorator Pattern**:
+   - Used to wrap endpoints with authorization and authentication checks via `Depends(get_current_user)`.
+   - Example: All endpoints requiring user context leverage a consistent authorization layer.
+
+4. **Repository Pattern (partially implemented)**:
+   - Started abstracting MongoDB operations (e.g., `polls_collection.find_one`) into repository functions to decouple data access from business logic.
+
+---
+
+### **Future Improvements**
+- **Observer Pattern**:
+   - Consider for sending real-time notifications (e.g., WebSocket updates) whenever a question is added or a vote is cast.
+   
+- **Complete Repository Implementation**:
+   - Fully abstract database operations into a repository layer for better testability and maintainability.
+
+- **Strategy Pattern**:
+   - Implement for analytics calculations, allowing dynamic handling of different poll types (e.g., `MultipleChoiceAnalytics`, `QnAAnalytics`).
+
+---

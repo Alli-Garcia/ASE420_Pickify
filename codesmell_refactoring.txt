@@ -1,0 +1,40 @@
+### **Code Smells Identified**
+1. **Long Functions**:
+   - Functions like `view_dashboard` and `submit_question` were overloaded with multiple responsibilities, making them harder to read and maintain.
+2. **Duplicate Code**:
+   - Redundant logic was found in both `poll_controller.py` and `analytics_controller.py` for handling poll retrieval and authorization.
+3. **Inconsistent Authorization Handling**:
+   - Functions inconsistently handled user authentication, leading to repeated token-parsing logic.
+4. **Lack of Separation of Concerns**:
+   - Business logic (e.g., vote counting) was tightly coupled with controller logic.
+5. **Hardcoded Strings**:
+   - Repeated hardcoded error messages and URL paths reduced flexibility.
+6. **Complex Conditionals**:
+   - Nested `if` conditions in endpoints like `vote` and `submit_question` made it difficult to follow the logic.
+7. **Database Over-Reliance**:
+   - Direct database operations (e.g., MongoDB queries) spread throughout the code without an abstraction layer.
+
+---
+
+### **Refactorings Used**
+1. **Function Extraction**:
+   - Broke down long functions like `view_dashboard` into smaller helper functions to handle tasks such as `calculate_analytics`, `fetch_feedback`, and `authorize_user`.
+   - Example: `calculate_analytics` now processes Q&A and multiple-choice analytics separately.
+   
+2. **Centralized Authentication**:
+   - Standardized the `get_current_user` logic into a reusable helper function, reducing redundancy across multiple files.
+   
+3. **Encapsulation of Business Logic**:
+   - Moved vote and question-related logic into dedicated functions (e.g., `process_vote`, `add_question`).
+   - Example: `submit_question` now offloads question-creation logic to a helper function.
+   
+4. **Introduction of Constants/Config**:
+   - Replaced hardcoded strings like `"multiple_choice"` and error messages with constants for better maintainability.
+   
+5. **Simplification of Conditionals**:
+   - Replaced complex `if-else` blocks with dictionary-based mappings where appropriate (e.g., poll type handling in `view_dashboard`).
+   
+6. **Redirection Logic Standardization**:
+   - Unified the redirection pattern for dashboard views after voting, answering, and submitting questions.
+
+---

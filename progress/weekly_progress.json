@@ -1,0 +1,31 @@
+{
+    "progress": [
+        {
+            "date_range": "11/10 - 11/17",
+            "stage": "Project Proposal",
+            "tasks": [
+                "Defined project objectives",
+                "Identified requirements",
+                "Prepared initial project scope"
+            ]
+        },
+        {
+            "date_range": "11/17 - 11/21",
+            "stage": "Project Design",
+            "tasks": [
+                "Created detailed design documents",
+                "Developed wireframes and mockups",
+                "Reviewed design with stakeholders"
+            ]
+        },
+        {
+            "date_range": "11/21 - 12/04",
+            "stage": "Development",
+            "tasks": [
+                "Implemented core functionality",
+                "Tested modules for bugs",
+                "Prepared for project deployment and documentations"
+            ]
+        }
+    ]
+}
