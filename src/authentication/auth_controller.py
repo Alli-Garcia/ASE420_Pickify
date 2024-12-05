@@ -4,9 +4,11 @@ from fastapi.responses import RedirectResponse
 from datetime import datetime, timezone
 from jose import JWTError, jwt
 from src.authentication.utils import create_access_token, verify_password, hash_password, initialize_firebase
-from src.database import users_collection
+from src.database import database
 import logging
 import os
+
+users_collection = database.get_collection("users")
 
 # Initialize Firebase Admin SDK
 initialize_firebase()
@@ -124,20 +126,20 @@ async def get_current_user(request: Request):
     token = request.cookies.get("Authorization")
     if not token or not token.startswith("Bearer "):
         logging.warning("Authentication failed: token missing or invalid.")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
+        return None
     try:
         # Decode and validate the token
         token = token[7:]  # Remove "Bearer " prefix
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not username:
-            raise HTTPException(status_code=401, detail="Invalid token: Missing 'sub' claim.")
-
+            logging.warning("Token is missing 'sub' claim.")
+            return None
         # Retrieve the user from the database
         user = await users_collection.find_one({"username": username})
         if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+            logging.warning("User not found in the database.")
+            return None
         return user
 
     except JWTError as e:

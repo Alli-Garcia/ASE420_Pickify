@@ -11,6 +11,7 @@ import logging
 # Import application configuration from centralized file
 from src.config import SECRET_KEY, ALGORITHM, MONGODB_URI, firebase_json_path
 from src.authentication.auth_controller import router as auth_router, get_current_user
+from src.analytics.analytics_controller import router as analytics_router
 from src.notifications.fcm_controller import router as fcm_router
 from src.polls.poll_controller import router as poll_router
 from src.feedback.feedback_controller import router as feedback_router
@@ -80,6 +81,8 @@ app.include_router(poll_router, prefix="/polls", tags=["Polls"])
 app.include_router(feedback_router, prefix="/feedback", tags=["Feedback"])
 app.include_router(voting_router, prefix="/voting", tags=["Voting"])
 app.include_router(fcm_router, prefix="/fcm", tags=["FCM"])
+app.include_router(analytics_router, prefix="/analytics", tags=["Analytics"])
+
 
 # Root endpoint for serving index.html
 @app.get("/", response_class=HTMLResponse)

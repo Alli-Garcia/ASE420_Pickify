@@ -26,7 +26,7 @@
         <ul>
             {% for poll in polls %}
                 <li>
-                    <a href="/polls/{{ poll['_id'] }}">{{ poll['activity_title'] }}</a>
+                    <a href="/polls/edit/{{ poll['_id'] }}">{{ poll['activity_title'] }}</a>
                     <p>Type: {{ poll['type'] }}</p>
                     <p>Question: {{ poll['poll_question'] }}</p>
                 </li>

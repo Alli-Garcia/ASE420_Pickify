@@ -8,9 +8,7 @@ from src.config import SECRET_KEY, ALGORITHM
 from bson import ObjectId
 from typing import List
 from datetime import datetime
-from .models import Feedback  # Import Feedback from models.py
 import logging
-from pydantic import BaseModel, ValidationError
 
 router = APIRouter()
 
@@ -49,7 +47,7 @@ async def add_feedback(
             logging.error(f"Poll {poll_id} not found.")
             raise HTTPException(status_code=404, detail="Poll not found")
 
-        # Authorization
+        # Authorization (allow anonymous users)
         guest_email = request.query_params.get("email")
         current_user = None
         token = request.cookies.get("Authorization")
@@ -63,6 +61,7 @@ async def add_feedback(
                 logging.warning("Failed to decode token. Treating as guest.")
 
         commenter = current_user or guest_email or "Anonymous"
+
         # Prepare feedback data
         feedback_data = {
             "poll_id": str(poll_id),
@@ -85,20 +84,12 @@ async def add_feedback(
         )
         logging.info(f"Feedback added for poll {poll_id} by {commenter}")
 
-        return RedirectResponse(url=f"/polls/dashboard/{poll_id}", status_code=303)
-    except ValidationError as ve:
-        logging.error(f"Validation error: {ve}")
-        raise HTTPException(status_code=422, detail=str(ve))
+        # Redirect to the correct analytics dashboard
+        return RedirectResponse(url=f"/analytics/dashboard/{poll_id}", status_code=303)
     except Exception as e:
         logging.error(f"Unexpected error while adding feedback: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while adding feedback")
 
-def is_valid_objectid(id_str):
-    try:
-        ObjectId(id_str)
-        return True
-    except:
-        return False
 
 # List Feedback
 @router.get("/list")
@@ -116,7 +107,7 @@ async def list_feedback(poll_id: str, request: Request):
             logging.error(f"Poll {poll_id} not found.")
             raise HTTPException(status_code=404, detail="Poll not found")
 
-        # Authorization Check
+        # Authorization Check (allow public feedback viewing)
         guest_email = request.query_params.get("email")
         is_authorized = (
             poll.get("is_public", True) or
@@ -140,36 +131,11 @@ async def list_feedback(poll_id: str, request: Request):
         logging.error(f"Error fetching feedback for poll ID {poll_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch feedback")
 
-# Retrieve Comments for a Poll
-@router.get("/poll/{poll_id}/comments")
-async def get_poll_feedback(poll_id: str, current_user: dict = Depends(get_current_user)):
-    logging.info(f"Retrieving comments for poll {poll_id}")
 
-    # Validate Poll
-    poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
-    if not poll:
-        logging.error(f"Poll {poll_id} not found.")
-        raise HTTPException(status_code=404, detail="Poll not found")
-
-    # Authorization
-    user_email = current_user.get("email") if current_user else None
-    user_username = current_user.get("username") if current_user else None
-    is_creator = current_user and current_user.get("username") == poll["creator"]
-    is_participant = user_email and user_email in poll.get("participants", [])
-
-    if not (is_creator or is_participant):
-        logging.warning(
-            f"Unauthorized attempt to view comments for poll {poll_id} by "
-            f"{user_email or user_username or 'unknown user'}."
-        )
-        raise HTTPException(status_code=403, detail="User not authorized to view comments for this poll")
-
-    # Fetch Comments
+# Helper function to validate ObjectId
+def is_valid_objectid(id_str):
     try:
-        feedback_cursor = feedback_collection.find({"poll_id": poll_id})
-        feedback_list = await feedback_cursor.to_list(length=100)
-        logging.info(f"Comments retrieved for poll {poll_id}. Count: {len(feedback_list)}")
-        return feedback_list
-    except Exception as e:
-        logging.error(f"Error retrieving comments for poll {poll_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch comments")
+        ObjectId(id_str)
+        return True
+    except:
+        return False

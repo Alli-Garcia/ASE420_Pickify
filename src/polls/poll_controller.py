@@ -47,6 +47,11 @@ async def choose_poll_type(poll_type: str = Form(...)):
 
 @router.get("/create", response_class=HTMLResponse)
 async def create_poll_form(request: Request, poll_type: str, current_user: dict = Depends(get_current_user)):
+
+    if not current_user:  # Check if the user is authenticated
+        # Redirect to login page if not authenticated
+        return RedirectResponse(url="/auth/login", status_code=303)
+
     """Render the create poll form."""
     if poll_type not in ["multiple_choice", "q_and_a", "wordcloud"]:
         raise HTTPException(status_code=400, detail="Invalid poll type")
@@ -87,6 +92,7 @@ async def create_poll(
             "votes": {option: 0 for option in options or []},
             "voters": [],
             "is_public" : True,
+            "questions" : [] if poll_type == "q_and_a" else None
         }
 
         result = await polls_collection.insert_one(poll)
@@ -103,7 +109,7 @@ async def create_poll(
         f"Click the link below to participate:\n{poll_url}\n\n")
         send_email(participants, subject, body)
 
-        return RedirectResponse(url=f"/polls/dashboard/{result.inserted_id}", status_code=303)
+        return RedirectResponse(url=f"/analytics/{result.inserted_id}", status_code=303)
     except Exception as e:
         logging.error(f"Error creating poll: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred while creating the poll")
@@ -135,80 +141,6 @@ async def view_poll(poll_id: str, request: Request):
         logging.error(f"Error accessing poll {poll_id}: {e}")
         raise HTTPException(status_code=500, detail="Unable to load poll")
 
-@router.get("/dashboard/{poll_id}", response_class=HTMLResponse)
-async def view_dashboard(poll_id: str, request: Request):
-    try:
-        logging.debug(f"Accessing dashboard for poll ID: {poll_id}")
-
-        # Fetch the poll
-        poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
-        if not poll:
-            logging.error(f"Poll not found: {poll_id}")
-            raise HTTPException(status_code=404, detail="Poll not found")
-
-        # Debug fetched poll data
-        logging.debug(f"Fetched poll data: {poll} (type: {type(poll)})")
-
-        # Validate poll structure
-        if not isinstance(poll, dict):
-            logging.error(f"Invalid poll format for ID {poll_id}: {poll}")
-            raise HTTPException(status_code=500, detail="Invalid poll data format")
-
-        required_keys = ["activity_title", "poll_question", "creator", "options", "votes", "participants"]
-        missing_keys = [key for key in required_keys if key not in poll]
-        if missing_keys:
-            logging.error(f"Poll is missing required keys: {missing_keys}")
-            raise HTTPException(status_code=500, detail=f"Poll data is incomplete: {missing_keys}")
-
-        # Determine the user
-        guest_email = request.query_params.get("email")
-        current_user = None
-        token = request.cookies.get("Authorization")
-        if token:
-            try:
-                scheme, token_value = token.split(" ", 1)
-                if scheme.lower() == "bearer":
-                    payload = jwt.decode(token_value, SECRET_KEY, algorithms=[ALGORITHM])
-                    current_user = payload.get("sub")
-            except (JWTError, ValueError):
-                logging.warning("Failed to decode token for authentication. Treating as guest.")
-
-        voter_id = current_user or guest_email or "Anonymous"
-
-        # Permission checks
-        is_creator = current_user and current_user == poll.get("creator")
-        is_participant = current_user and current_user in poll.get("participants", [])
-        is_voter = voter_id in poll.get("voters", [])
-        is_public = poll.get("is_public", True)  # Default to True if not set
-
-        if not (is_creator or is_participant or is_voter or is_public):
-            logging.warning(f"Unauthorized access attempt to poll {poll_id}")
-            raise HTTPException(status_code=403, detail="Not authorized to view this poll")
-
-        # Fetch analytics data
-        votes = poll.get("votes", {})
-        total_votes = sum(votes.values()) if isinstance(votes, dict) else 0
-        participation_rate = len(poll.get("participants", []))
-        logging.debug(f"Dashboard data prepared for poll ID: {poll_id}")
-
-        # Render dashboard template
-        return templates.TemplateResponse(
-            "dashboard.html",
-            {
-                "request": request,
-                "poll_id": poll_id,
-                "poll_title": poll.get("activity_title", "Untitled Poll"),
-                "poll_question": poll.get("poll_question", "No question provided"),
-                "total_votes": total_votes,
-                "participation_rate": participation_rate,
-                "option_votes": votes,
-                "current_user": voter_id,
-            },
-        )
-    except Exception as e:
-        logging.error(f"Error accessing dashboard for poll ID {poll_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Unable to load poll dashboard")
-
 @router.get("/analytics/{poll_id}")
 async def poll_analytics(poll_id: str, request: Request):
     try:
@@ -231,19 +163,226 @@ async def poll_analytics(poll_id: str, request: Request):
             logging.warning(f"Unauthorized access attempt to poll analytics: {poll_id}")
             raise HTTPException(status_code=403, detail="User not authorized to view analytics")
 
-        # Prepare analytics data
-        total_votes = sum(poll["votes"].values())
-        option_votes = poll["votes"]
-        participation_rate = len(poll["participants"])
+        if poll["type"] == "q_and_a":
+            questions = poll.get("questions", [])
+            analytics_data = {
+                "questions": questions,
+                "total_participants": len(poll.get("participants", [])),
+            }
+        else:
+            total_votes = sum(poll["votes"].values())
+            option_votes = poll["votes"]
+            analytics_data = {
+                "total_votes": total_votes,
+                "option_votes": option_votes,
+                "participation_rate": len(poll["participants"]),
+            }
 
-        analytics_data = {
-            "total_votes": total_votes,
-            "option_votes": option_votes,
-            "participation_rate": participation_rate
-        }
         logging.debug(f"Analytics data prepared for poll ID: {poll_id}")
 
         return analytics_data
     except Exception as e:
         logging.error(f"Error fetching analytics for poll ID {poll_id}: {e}")
         raise HTTPException(status_code=500, detail="Unable to fetch poll analytics")
+
+@router.get("/edit/{poll_id}", response_class=HTMLResponse)
+async def edit_poll_form(poll_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """Render the edit poll form with existing poll data."""
+    try:
+        logging.info(f"Fetching poll {poll_id} for editing")
+
+        # Fetch the poll from the database
+        poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
+        if not poll:
+            logging.error(f"Poll {poll_id} not found")
+            raise HTTPException(status_code=404, detail="Poll not found")
+
+        # Check if the current user is the creator of the poll
+        if poll["creator"] != current_user["username"]:
+            logging.warning(f"Unauthorized attempt to edit poll {poll_id} by user {current_user['username']}")
+            raise HTTPException(status_code=403, detail="Not authorized to edit this poll")
+
+        # Render the form with existing poll data
+        return templates.TemplateResponse(
+            "create_poll.html",
+            {
+                "request": request,
+                "poll_id": poll_id,
+                "poll_type": poll["type"],
+                "activity_title": poll["activity_title"],
+                "poll_question": poll["poll_question"],
+                "options": poll["options"],
+                "timer_minutes": poll["timer_minutes"],
+                "participants": ", ".join(poll["participants"]),
+                "current_user": current_user,
+                "poll_creator": poll.get("creator"),  # Add this line
+                "current_user": current_user
+            },
+        )
+    except Exception as e:
+        logging.error(f"Error loading edit form for poll {poll_id}: {e}")
+        raise HTTPException(status_code=500, detail="Unable to load edit form")
+
+@router.post("/edit/{poll_id}")
+async def edit_poll(
+    poll_id: str,
+    request: Request,
+    activity_title: str = Form(...),
+    add_people: str = Form(...),
+    set_timer: int = Form(...),
+    poll_question: str = Form(...),
+    num_options: int = Form(None),
+    options: List[str] = Form(None),
+    poll_type: str = Form(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Handle poll editing."""
+    try:
+        logging.info(f"Editing poll {poll_id}")
+
+        # Fetch the poll to verify permissions
+        poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
+        if not poll:
+            logging.error(f"Poll {poll_id} not found")
+            raise HTTPException(status_code=404, detail="Poll not found")
+
+        if poll["creator"] != current_user["username"]:
+            logging.warning(f"Unauthorized attempt to edit poll {poll_id} by user {current_user['username']}")
+            raise HTTPException(status_code=403, detail="Not authorized to edit this poll")
+
+        # Update the poll data
+        participants = [email.strip() for email in add_people.split(",") if email.strip()]
+        updated_poll = {
+            "activity_title": activity_title,
+            "participants": participants,
+            "timer_minutes": set_timer,
+            "poll_question": poll_question,
+            "options": options or [],
+            "type": poll_type,
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        result = await polls_collection.update_one(
+            {"_id": ObjectId(poll_id)},
+            {"$set": updated_poll},
+        )
+
+        if result.modified_count == 0:
+            logging.error(f"Failed to update poll {poll_id}")
+            raise HTTPException(status_code=500, detail="Failed to update poll")
+
+        logging.info(f"Poll {poll_id} updated successfully")
+
+        return RedirectResponse(url=f"/analytics/dashboard/{poll_id}", status_code=303)
+    except Exception as e:
+        logging.error(f"Error updating poll {poll_id}: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred while updating the poll")
+
+@router.get("/shared-with-me", response_class=HTMLResponse)
+async def polls_shared_with_me(request: Request, current_user: dict = Depends(get_current_user)):
+    """List polls shared with the current user."""
+    try:
+        logging.info(f"Fetching polls shared with user {current_user['username']}")
+
+        polls_cursor = polls_collection.find({"participants": {"$in": [current_user["email"]]}})
+        polls = await polls_cursor.to_list(length=100)
+        logging.info(f"Polls shared with user retrieved: {len(polls)}")
+
+        return templates.TemplateResponse("shared_with_me.html", {"request": request, "polls": polls})
+    except Exception as e:
+        logging.error(f"Error fetching polls shared with user: {e}")
+        raise HTTPException(status_code=500, detail="Unable to fetch polls")
+
+@router.get("/created-by-me", response_class=HTMLResponse)
+async def polls_created_by_me(request: Request, current_user: dict = Depends(get_current_user)):
+    """List polls created by the current user."""
+    try:
+        logging.info(f"Fetching polls created by user {current_user['username']}")
+
+        polls_cursor = polls_collection.find({"creator": current_user["username"]})
+        polls = await polls_cursor.to_list(length=100)
+        logging.info(f"Polls created by user retrieved: {len(polls)}")
+
+        return templates.TemplateResponse("created_by_me.html", {"request": request, "polls": polls})
+    except Exception as e:
+        logging.error(f"Error fetching polls created by user: {e}")
+        raise HTTPException(status_code=500, detail="Unable to fetch polls")
+
+@router.post("/polls/{poll_id}/questions")
+async def submit_question(
+    poll_id: str,
+    question: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to submit questions")
+
+        poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
+        if not poll:
+            raise HTTPException(status_code=404, detail="Poll not found")
+
+        if poll["poll_type"] != "q_and_a":
+            raise HTTPException(status_code=400, detail="This poll does not accept questions")
+
+        new_question = {
+            "question_id": ObjectId(),
+            "question": question,
+            "author": current_user["username"] if current_user else "Guest",
+            "created_at": datetime.now(timezone.utc),
+            "answers": []
+        }
+
+        result = await polls_collection.update_one(
+            {"_id": ObjectId(poll_id)},
+            {"$push": {"questions": new_question}}
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=500, detail="Failed to add question")
+
+        return RedirectResponse(url=f"/analytics/dashboard/{poll_id}", status_code=303)
+    except Exception as e:
+        logging.error(f"Error submitting question: {e}")
+        raise HTTPException(status_code=500, detail="Unable to submit question")
+
+@router.post("/polls/{poll_id}/questions/{question_id}/answers")
+async def submit_answer(
+    poll_id: str,
+    question_id: str,
+    answer: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to submit answers")
+
+        poll = await polls_collection.find_one({"_id": ObjectId(poll_id)})
+        if not poll:
+            raise HTTPException(status_code=404, detail="Poll not found")
+
+        if poll["poll_type"] != "q_and_a":
+            raise HTTPException(status_code=400, detail="This poll does not accept answers")
+
+        new_answer = {
+            "answer_id": ObjectId(),
+            "answer": answer,
+            "author": current_user["username"],
+            "created_at": datetime.now(timezone.utc)
+        }
+
+        result = await polls_collection.update_one(
+            {
+                "_id": ObjectId(poll_id),
+                "questions.question_id": ObjectId(question_id)
+            },
+            {"$push": {"questions.$.answers": new_answer}}
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=500, detail="Failed to add answer")
+
+        return RedirectResponse(url=f"/analytics/dashboard/{poll_id}", status_code=303)
+    except Exception as e:
+        logging.error(f"Error submitting answer: {e}")
+        raise HTTPException(status_code=500, detail="Unable to submit answer")

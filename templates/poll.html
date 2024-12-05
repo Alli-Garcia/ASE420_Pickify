@@ -7,16 +7,17 @@
 </head>
 <body>
     <h1>{{ poll['poll_question'] }}</h1>
+
+    <!-- Check poll type -->
+    {% if poll['type'] == 'multiple_choice' %}
+    <!-- Voting form for multiple-choice poll -->
     <form method="POST" action="/voting/vote">
-        <!-- Include poll ID as a hidden input -->
         <input type="hidden" name="poll_id" value="{{ poll['_id'] }}">
 
-        <!-- Optional field for guest email -->
         <label for="guest_email">Your email (optional):</label>
         <input type="email" id="guest_email" name="guest_email" placeholder="Enter your email">
         <br><br>
 
-        <!-- Display poll options as radio buttons -->
         {% for option in poll['options'] %}
         <div>
             <input type="radio" id="{{ option }}" name="option" value="{{ option }}" required>
@@ -28,6 +29,41 @@
         <button type="submit">Vote</button>
     </form>
 
+    {% elif poll['type'] == 'q_and_a' %}
+    <!-- Q&A poll section -->
+    <div>
+        <h2>Q&A</h2>
+        <ul id="questions">
+            {% for question in poll['questions'] %}
+            <li>
+                <strong>{{ question['question'] }}</strong> by {{ question['author'] }}<br>
+                <ul>
+                    {% for answer in question['answers'] %}
+                    <li>{{ answer['answer'] }} - {{ answer['author'] }}</li>
+                    {% endfor %}
+                </ul>
+
+                <!-- Form to submit an answer -->
+                <form method="POST" action="/polls/{{ poll['_id'] }}/questions/{{ question['question_id'] }}/answers">
+                    <input type="text" name="answer" placeholder="Your answer" required>
+                    <button type="submit">Submit Answer</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <!-- Form to submit a question -->
+        <form method="POST" action="/polls/{{ poll['_id'] }}/questions">
+            <input type="text" name="question" placeholder="Ask a question" required>
+            <button type="submit">Submit Question</button>
+        </form>
+    </div>
+
+    {% else %}
+    <p>Unsupported poll type.</p>
+    {% endif %}
+
+    <!-- Poll details -->
     <br>
     <div>
         <h3>Poll Details</h3>

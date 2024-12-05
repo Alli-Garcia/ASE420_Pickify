@@ -16,7 +16,13 @@
         <nav>
             <a href="/polls/shared-with-me" class="nav-link">Polls Shared with Me</a>
             <a href="/polls/created-by-me" class="nav-link">Polls Created by Me</a>
-            <a href="/polls/create" class="nav-link">Make Another Poll</a>
+            {% if current_user and current_user.username == poll_creator %}
+        <!-- If the user is the poll creator, allow them to create a poll -->
+        <a href="/polls/create?poll_type=multiple_choice" class="nav-link">Make Another Poll</a>
+        {% else %}
+            <!-- If the user is not the creator, redirect to the login page -->
+            <a href="/auth/login" class="nav-link">Make Another Poll</a>
+        {% endif %}
         </nav>
     </header>
 
@@ -28,18 +34,51 @@
             <p><strong>Question:</strong> <span id="poll-question">{{ poll_question }}</span></p>
             <p><strong>Total Participants:</strong> <span id="total-participants">{{ participation_rate }}</span></p>
             <p><strong>Total Votes:</strong> <span id="total-votes">{{ total_votes }}</span></p>
-            <p><strong>Poll Link:</strong> 
-                <a id="poll-link" href="{{ poll_url }}{% if guest_email %}?email={{ guest_email }}{% endif %}" target="_blank" aria-label="Share poll link">
-                Click to share
-                </a>
-                </p>                
+            <p>
+                <strong>Poll Link:</strong> 
+                <span id="poll-link">{{ poll_url }}{% if guest_email %}?email={{ guest_email }}{% endif %}</span>
+                <button id="copy-button" aria-label="Copy poll link">Copy</button>
+            </p>
         </div>
-
+        {% if poll_type == "q_and_a" %}
+        <div class="qna-analytics">
+            <h2>Q&A Analytics</h2>
+            <p><strong>Total Questions:</strong> {{ total_questions }}</p>
+            <p><strong>Total Answers:</strong> {{ total_answers }}</p>
+        </div>
+        {% endif %}
         <!-- Votes Chart -->
         <div class="chart-container">
             <h2>Votes by Option</h2>
             <canvas id="votesChart" width="400" height="200"></canvas>
         </div>
+
+        <!-- Q&A Section -->
+        {% if poll_type == "q_and_a" %}
+        <div class="qna-section">
+            <h2>Questions and Answers</h2>
+            <ul id="qna-list">
+                {% for question in questions %}
+                <li>
+                    <strong>{{ question.question }}</strong> by {{ question.author }}
+                    <ul>
+                        {% for answer in question.answers %}
+                        <li>{{ answer.answer }} - {{ answer.author }}</li>
+                        {% endfor %}
+                    </ul>
+                    <form method="POST" action="/polls/{{ poll_id }}/questions/{{ question.question_id }}/answers">
+                        <input type="text" name="answer" placeholder="Your answer" required>
+                        <button type="submit">Submit Answer</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+            <form method="POST" action="/polls/{{ poll_id }}/questions">
+                <input type="text" name="question" placeholder="Ask a question" required>
+                <button type="submit">Submit Question</button>
+            </form>
+        </div>
+        {% endif %}
 
         <!-- Feedback Section -->
         <div class="feedback-section">
@@ -54,11 +93,25 @@
         
             <!-- Feedback List -->
             <ul id="feedback-list">
-                <li id="no-feedback-message">No feedback yet.</li>
+                {% if feedback %}
+                    {% for fb in feedback %}
+                    <li><strong>{{ fb.commenter }}</strong>: {{ fb.comment }}</li>
+                    {% endfor %}
+                {% else %}
+                    <li>No feedback yet.</li>
+                {% endif %}
             </ul>
         </div>
     </section>
     <script>
+        document.getElementById("copy-button").addEventListener("click", function() {
+            const pollLink = document.getElementById("poll-link").textContent;
+            navigator.clipboard.writeText(pollLink).then(() => {
+                alert("Poll link copied to clipboard!");
+            }).catch(err => {
+                console.error("Failed to copy text: ", err);
+            });
+        });
         document.addEventListener("DOMContentLoaded", async function () {
             const pollId = "{{ poll_id }}";
             const guestEmail = new URLSearchParams(window.location.search).get("email") || null;
@@ -67,76 +120,125 @@
             async function loadChart() {
                 const url = `/polls/analytics/${pollId}${guestEmail ? `?email=${guestEmail}` : ''}`;
                 try {
-                    console.log(`Fetching analytics data from: ${url}`);
                     const response = await fetch(url);
                     if (!response.ok) {
                         throw new Error(`Failed to fetch analytics data (Status: ${response.status})`);
                     }
                     const data = await response.json();
 
-                    const chartLabels = Object.keys(data.option_votes);
-                    const chartData = Object.values(data.option_votes);
+                    if (data.questions) {
+                        // Handle Q&A analytics
+                        document.getElementById("votesChart").style.display = "none";
+                        const qaContainer = document.createElement("div");
+                        qaContainer.innerHTML = `<h3>Questions:</h3><ul>${
+                            data.questions.map(q => `<li>${q}</li>`).join("")
+                        }</ul>`;
+                        document.getElementById("analytics-content").appendChild(qaContainer);
+                    } else if (data.option_votes) {
+                        const chartLabels = Object.keys(data.option_votes);
+                        const chartData = Object.values(data.option_votes);
 
-                    if (!chartLabels.length || !chartData.length) {
-                        throw new Error("No data available for rendering the chart.");
-                    }
+                        if (!chartLabels.length || !chartData.length) {
+                            throw new Error("No data available for rendering the chart.");
+                        }
 
-                    const ctx = document.getElementById("votesChart").getContext("2d");
-                    new Chart(ctx, {
-                        type: "bar",
-                        data: {
-                            labels: chartLabels,
-                            datasets: [
-                                {
-                                    label: "# of Votes",
-                                    data: chartData,
-                                    backgroundColor: "rgba(54, 162, 235, 0.5)",
-                                    borderColor: "rgba(54, 162, 235, 1)",
-                                    borderWidth: 1,
-                                },
-                            ],
-                        },
-                        options: {
-                            scales: {
-                                y: { beginAtZero: true },
+                        const ctx = document.getElementById("votesChart").getContext("2d");
+                        new Chart(ctx, {
+                            type: "bar",
+                            data: {
+                                labels: chartLabels,
+                                datasets: [{ label: "# of Votes", data: chartData }],
                             },
-                        },
-                    });
-                } catch (error) {
-                    console.error("Error rendering chart:", error);
-                    alert("Failed to load and render analytics data. Please try again later.");
-                }
-            }
+                            options: { scales: { y: { beginAtZero: true } } },
+                        });
 
-            // Function to load and display feedback
-            async function loadFeedback() {
-                try {
-                    const feedbackUrl = `/feedback/list?poll_id=${pollId}${guestEmail ? `&email=${guestEmail}` : ''}`;
-                    console.log(`Fetching feedback data from: ${feedbackUrl}`);
-                    const response = await fetch(feedbackUrl);
-                    if (!response.ok) {
-                        throw new Error(`Failed to fetch feedback data (Status: ${response.status})`);
-                    }
-                    const feedbackData = await response.json();
-                    console.log("Feedback data received:", feedbackData);
-
-                    const feedbackList = document.getElementById("feedback-list");
-                    feedbackList.innerHTML = "";
-
-                    if (feedbackData.length === 0) {
-                        feedbackList.innerHTML = "<li>No feedback yet</li>";
                     } else {
-                        feedbackData.forEach((feedback) => {
-                            const li = document.createElement("li");
-                            li.textContent = `${feedback.commenter}: ${feedback.comment}`;
-                            feedbackList.appendChild(li);
+                        // Handle standard analytics
+                        const chartLabels = Object.keys(data.option_votes || {});
+                        const chartData = Object.values(data.option_votes || {});
+                        if (!chartLabels.length || !chartData.length) {
+                            alert("No data available for this poll.");
+                            return;
+                        }
+                        const ctx = document.getElementById("votesChart").getContext("2d");
+                        new Chart(ctx, {
+                            type: "bar",
+                            data: {
+                                labels: chartLabels,
+                                datasets: [{ label: "# of Votes", data: chartData }],
+                            },
+                            options: { scales: { y: { beginAtZero: true } } },
                         });
                     }
                 } catch (error) {
-                    console.error("Error loading feedback:", error);
-                    alert("Failed to load feedback data. Please try again later.");
+                    console.error("Error rendering chart:", error);
+                    alert("Failed to load analytics. Please try again later.");
                 }
             }
+
+
+            // Function to load and display feedback
+            async function loadChart() {
+    const url = `/polls/analytics/${pollId}${guestEmail ? `?email=${guestEmail}` : ''}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch analytics data (Status: ${response.status})`);
+        }
+        const data = await response.json();
+
+        // Check if it's a Q&A poll
+        if (data.questions && data.questions.length > 0) {
+            // Hide the chart container for Q&A polls
+            document.getElementById("votesChart").style.display = "none";
+
+            // Create a Q&A-specific analytics section
+            const qaContainer = document.createElement("div");
+            qaContainer.innerHTML = `
+                <h3>Questions:</h3>
+                <ul>
+                    ${data.questions.map(q => `<li>${q}</li>`).join("")}
+                </ul>
+            `;
+            document.getElementById("analytics-content").appendChild(qaContainer);
+        } 
+        // Handle polls with option_votes
+        else if (data.option_votes && Object.keys(data.option_votes).length > 0) {
+            const chartLabels = Object.keys(data.option_votes);
+            const chartData = Object.values(data.option_votes);
+
+            const ctx = document.getElementById("votesChart").getContext("2d");
+            new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: chartLabels,
+                    datasets: [
+                        {
+                            label: "# of Votes",
+                            data: chartData,
+                            backgroundColor: "rgba(54, 162, 235, 0.5)",
+                            borderColor: "rgba(54, 162, 235, 1)",
+                            borderWidth: 1,
+                        },
+                    ],
+                },
+                options: {
+                    scales: {
+                        y: { beginAtZero: true },
+                    },
+                },
+            });
+        } 
+        // No data available
+        else {
+            alert("No data available for this poll.");
+        }
+    } catch (error) {
+        console.error("Error rendering chart:", error);
+        alert("Failed to load analytics. Please try again later.");
+    }
+}
+
 
             // Load chart and feedback on page load
             await loadChart();

@@ -49,7 +49,7 @@
 </head>
 <body>
     <h1>Create Your Poll</h1>
-    <form action="/polls/create" method="POST">
+    <form action="{% if poll_id %}/polls/edit/{{ poll_id }}{% else %}/polls/create{% endif %}" method="POST">
         <label for="activity_title">Activity Title:</label>
         <input type="text" id="activity_title" name="activity_title" required><br><br>
 
